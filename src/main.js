@@ -62,34 +62,41 @@ function init() {
   window.addEventListener('mousemove', handlePointerMove);
   window.addEventListener('mouseup', handlePointerUp);
 
-  // Touch Events
-  canvas.addEventListener('touchstart', (e) => {
-    // We don't preventDefault here to allow the browser to detect gestures
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      handlePointerDown(touch);
-    } else {
-      // Multi-touch: definitely not drawing
+  // Mobile Touch Events
+  const onTouchStart = (e) => {
+    if (e.touches.length > 1) {
       isDrawing = false;
       activePathId = null;
+      return; // Let browser handle multi-touch gestures
     }
-  }, { passive: true }); // Use passive: true to stay out of the browser's way
 
-  window.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 1) {
-      // Only prevent scrolling if we are actively drawing a path
-      if (isDrawing) {
-        e.preventDefault();
-      }
+    // Single touch: check if it's on the canvas
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+      touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+      // Only prevent default if we're on the canvas to allow scrolling elsewhere
+      e.preventDefault();
+      handlePointerDown(touch);
+    }
+  };
+
+  const onTouchMove = (e) => {
+    if (e.touches.length > 1) {
+      isDrawing = false;
+      activePathId = null;
+      return; // Let browser handle multi-touch gestures
+    }
+
+    if (isDrawing) {
+      e.preventDefault();
       const touch = e.touches[0];
       handlePointerMove(touch);
-    } else {
-      // Multi-touch move: ensure drawing state is cleared
-      isDrawing = false;
-      activePathId = null;
     }
-  }, { passive: false });
+  };
 
+  window.addEventListener('touchstart', onTouchStart, { passive: false });
+  window.addEventListener('touchmove', onTouchMove, { passive: false });
   window.addEventListener('touchend', handlePointerUp);
   window.addEventListener('touchcancel', handlePointerUp);
 

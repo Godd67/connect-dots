@@ -87,7 +87,7 @@ canvas {
   background: #222;
   border-radius: 4px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  touch-action: auto;
+  touch-action: manipulation;
   cursor: pointer;
   display: block;
 }
