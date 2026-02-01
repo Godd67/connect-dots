@@ -34,13 +34,34 @@ function isMobile() {
 
 function calculateCellSize(gridSize) {
   if (!isMobile()) return DEFAULT_CELL_SIZE;
-  const maxWidth = window.innerWidth - PADDING * 2 - 20; // 20 extra for safety margin
+  const availableWidth = document.documentElement.clientWidth || window.innerWidth;
+  const maxWidth = availableWidth - PADDING * 2 - 30; // 30 extra for safety margin
   return Math.floor(maxWidth / gridSize);
 }
 
 function init() {
   generateBtn.addEventListener('click', generate);
-  revealBtn.addEventListener('click', toggleReveal);
+
+  // Hint button: press and hold to show
+  const showHint = (e) => {
+    if (e && e.cancelable) e.preventDefault();
+    showPaths = true;
+    draw();
+  };
+  const hideHint = (e) => {
+    // DO NOT prevent default on touchend/mouseup as it blocks click events and triggers console errors
+    showPaths = false;
+    draw();
+  };
+
+  revealBtn.addEventListener('mousedown', showHint);
+  revealBtn.addEventListener('touchstart', showHint, { passive: false });
+  // Add release listeners to window/revealBtn for reliability
+  revealBtn.addEventListener('mouseup', hideHint);
+  revealBtn.addEventListener('touchend', hideHint);
+  revealBtn.addEventListener('touchcancel', hideHint);
+  window.addEventListener('mouseup', hideHint); // Backup if release outside button
+  window.addEventListener('touchend', hideHint); // Backup if release outside button
 
   // Grid size controls
   sizeDecreaseBtn.addEventListener('click', () => {
@@ -63,39 +84,46 @@ function init() {
   window.addEventListener('mouseup', handlePointerUp);
 
   // Mobile Touch Events
+  // Mobile Touch Events
   const onTouchStart = (e) => {
     if (e.touches.length > 1) {
-      isDrawing = false;
-      activePathId = null;
-      return; // Let browser handle multi-touch gestures
+      if (isDrawing) {
+        isDrawing = false;
+        activePathId = null;
+        draw();
+      }
+      return; // Never preventDefault on multi-touch
     }
 
-    // Single touch: check if it's on the canvas
+    // Single touch
     const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
-      touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
-      // Only prevent default if we're on the canvas to allow scrolling elsewhere
-      e.preventDefault();
-      handlePointerDown(touch);
+    const started = handlePointerDown(touch);
+
+    // ONLY preventDefault if we actually hit a dot and started drawing.
+    // This is crucial: it lets the browser handle scroll/zoom if we touch empty space.
+    if (started) {
+      if (e.cancelable) e.preventDefault();
     }
   };
 
   const onTouchMove = (e) => {
     if (e.touches.length > 1) {
-      isDrawing = false;
-      activePathId = null;
-      return; // Let browser handle multi-touch gestures
+      if (isDrawing) {
+        isDrawing = false;
+        activePathId = null;
+        draw();
+      }
+      return;
     }
 
     if (isDrawing) {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       const touch = e.touches[0];
       handlePointerMove(touch);
     }
   };
 
-  window.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
   window.addEventListener('touchend', handlePointerUp);
   window.addEventListener('touchcancel', handlePointerUp);
@@ -140,16 +168,18 @@ function getCellFromCoords(x, y) {
 }
 
 function handlePointerDown(e) {
-  if (!grid) return;
+  if (!grid) return false;
   const cell = getCellFromCoords(e.clientX, e.clientY);
-  if (!cell) return;
+  if (!cell) return false;
 
   const [r, c] = cell;
   const pathId = grid.cells[r][c];
 
   // Only start drawing if we clicked on an endpoint dot
   if (pathId > 0) {
-    const path = grid.paths.find(p => p.id === pathId);
+    const path = grid.paths.find(p => p.id === parseInt(pathId));
+    if (!path) return false;
+
     const start = path.points[0];
     const end = path.points[path.points.length - 1];
 
@@ -162,8 +192,10 @@ function handlePointerDown(e) {
       userPaths[pathId] = [cell];
       lastCell = cell;
       draw();
+      return true;
     }
   }
+  return false;
 }
 
 function handlePointerMove(e) {
@@ -242,6 +274,29 @@ function handlePointerMove(e) {
 
 function handlePointerUp() {
   if (isDrawing && activePathId) {
+    // Check if the path is complete before stopping
+    const path = grid.paths.find(p => p.id === activePathId);
+    if (path) {
+      const userPath = userPaths[activePathId];
+      const start = path.points[0];
+      const end = path.points[path.points.length - 1];
+
+      const first = userPath[0];
+      const last = userPath[userPath.length - 1];
+
+      const isStart = (first[0] === start[0] && first[1] === start[1]);
+      const isEnd = (last[0] === end[0] && last[1] === end[1]);
+      const isStartRev = (first[0] === end[0] && first[1] === end[1]);
+      const isEndRev = (last[0] === start[0] && last[1] === start[1]);
+
+      const complete = (isStart && isEnd) || (isStartRev && isEndRev);
+
+      if (!complete) {
+        // Remove unfinished path
+        delete userPaths[activePathId];
+        draw();
+      }
+    }
     checkWin();
   }
   isDrawing = false;
@@ -285,11 +340,6 @@ function checkWin() {
   }
 }
 
-function toggleReveal() {
-  showPaths = !showPaths;
-  revealBtn.textContent = showPaths ? "Hide Paths" : "Reveal Paths";
-  draw();
-}
 
 function resetGameState() {
   showPaths = false;
@@ -297,7 +347,7 @@ function resetGameState() {
   isDrawing = false;
   activePathId = null;
   lastCell = null;
-  revealBtn.textContent = "Reveal Paths";
+  revealBtn.textContent = "Hint";
 }
 
 function generate() {
