@@ -5,10 +5,14 @@
   --panel-bg: #2a2a2a;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   display: flex;
-  place-items: center;
+  justify-content: center;
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--bg-color);
@@ -17,26 +21,45 @@ body {
 }
 
 #app {
+  width: 100%;
   max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
   text-align: center;
 }
 
 .controls {
   margin-bottom: 20px;
-  padding: 10px;
+  padding: 10px 15px;
   background: var(--panel-bg);
   border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
 }
 
-input {
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid #444;
-  background: #333;
-  color: white;
-  margin-right: 10px;
+.grid-size-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.size-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 1.5em;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#grid-size-display {
+  font-size: 1.2em;
+  font-weight: bold;
+  min-width: 2em;
+  text-align: center;
 }
 
 button {
@@ -47,8 +70,13 @@ button {
   font-weight: 500;
   font-family: inherit;
   background-color: var(--accent-color);
+  color: white;
   cursor: pointer;
   transition: border-color 0.25s;
+}
+
+#reveal-btn {
+  min-width: 135px;
 }
 
 button:hover {
@@ -59,7 +87,9 @@ button:hover {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin: 20px 0;
+  margin: 20px auto;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 canvas {
@@ -68,6 +98,7 @@ canvas {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   touch-action: none;
   cursor: pointer;
+  display: block;
 }
 
 #color-legend {
@@ -88,37 +119,48 @@ canvas {
 #status {
   min-height: 1.5em;
   color: #888;
+  margin-top: 10px;
+}
+
+footer {
+  margin-top: 30px;
+  padding: 15px;
+  color: #666;
+  font-size: 0.85em;
+}
+
+footer p {
+  margin: 0;
 }
 
 /* Mobile-specific styles */
-@media (max-width: 768px) {
+@media (max-width: 600px) {
   #app {
-    padding: 1rem;
+    padding: 0.5rem;
   }
 
   h1 {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
+    margin: 0.5rem 0;
   }
 
   .controls {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 10px;
+    gap: 8px;
+    padding: 8px;
   }
 
-  .controls input,
-  .controls button {
-    width: 100%;
-    margin: 0;
+  button {
+    padding: 0.5em 0.8em;
+    font-size: 0.9em;
+  }
+
+  .size-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1.2em;
   }
 
   canvas {
-    touch-action: pinch-zoom manipulation;
-  }
-
-  .canvas-container {
-    overflow: auto;
-    -webkit-overflow-scrolling: touch;
+    touch-action: manipulation;
   }
 }

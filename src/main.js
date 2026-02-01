@@ -3,10 +3,14 @@ import { Generator } from './Generator.js';
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
-const sizeInput = document.getElementById('grid-size');
 const generateBtn = document.getElementById('generate-btn');
 const revealBtn = document.getElementById('reveal-btn');
 const statusEl = document.getElementById('status');
+const sizeDisplay = document.getElementById('grid-size-display');
+const sizeDecreaseBtn = document.getElementById('size-decrease');
+const sizeIncreaseBtn = document.getElementById('size-increase');
+
+let gridSize = 5; // Current grid size
 
 let grid = null;
 let showPaths = false;
@@ -38,6 +42,21 @@ function init() {
   generateBtn.addEventListener('click', generate);
   revealBtn.addEventListener('click', toggleReveal);
 
+  // Grid size controls
+  sizeDecreaseBtn.addEventListener('click', () => {
+    if (gridSize > 5) {
+      gridSize--;
+      sizeDisplay.textContent = gridSize;
+    }
+  });
+
+  sizeIncreaseBtn.addEventListener('click', () => {
+    if (gridSize < 20) {
+      gridSize++;
+      sizeDisplay.textContent = gridSize;
+    }
+  });
+
   // Mouse Events
   canvas.addEventListener('mousedown', handlePointerDown);
   window.addEventListener('mousemove', handlePointerMove);
@@ -58,8 +77,29 @@ function init() {
 
   window.addEventListener('touchend', handlePointerUp);
 
+  // Colorize title
+  colorizeTitle();
+
   // Initial generation
   generate();
+}
+
+function colorizeTitle() {
+  const titleSpan = document.getElementById('title-colored');
+  if (!titleSpan) return;
+
+  const text = titleSpan.textContent;
+  titleSpan.innerHTML = '';
+
+  for (let i = 0; i < text.length; i++) {
+    const span = document.createElement('span');
+    span.textContent = text[i];
+    if (text[i] !== ' ') {
+      const hue = (i * 137.5) % 360;
+      span.style.color = `hsl(${hue}, 85%, 60%)`;
+    }
+    titleSpan.appendChild(span);
+  }
 }
 
 function getCellFromCoords(x, y) {
@@ -229,11 +269,7 @@ function toggleReveal() {
 }
 
 function generate() {
-  const size = parseInt(sizeInput.value);
-  if (size < 5 || size > 20) {
-    alert("Size must be between 5 and 20");
-    return;
-  }
+  const size = gridSize;
 
   // Recalculate dynamic sizing for mobile
   CELL_SIZE = calculateCellSize(size);
@@ -259,11 +295,6 @@ function generate() {
 
       if (success) {
         statusEl.textContent = `Generated in ${Math.round(t1 - t0)}ms`;
-        statusEl.style.color = "#888";
-        statusEl.style.fontWeight = "normal";
-        showPaths = false;
-        userPaths = {};
-        revealBtn.textContent = "Reveal Paths";
         draw();
         renderColorLegend();
       } else {
@@ -501,12 +532,13 @@ function drawDot(r, c, color, pathId) {
 
   // Add border for better visibility
   ctx.strokeStyle = '#000';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = Math.max(1, DOT_RADIUS / 8);
   ctx.stroke();
 
-  // Draw path number in center
-  ctx.fillStyle = '#000'; // Black text for contrast
-  ctx.font = 'bold 14px Arial';
+  // Draw path number in center (scaled to fit inside dot)
+  const fontSize = Math.max(10, Math.floor(DOT_RADIUS * 0.9));
+  ctx.fillStyle = '#000';
+  ctx.font = `bold ${fontSize}px Arial`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(pathId.toString(), x, y);

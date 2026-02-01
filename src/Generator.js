@@ -292,7 +292,7 @@ export class Generator {
             const dirMap = { '0,1': 'East', '0,-1': 'West', '1,0': 'South', '-1,0': 'North' };
             const direction = dirMap[`${currR - r},${currC - c}`] || 'Unknown';
             const emptyNeighbors = this.getNeighbors(currR, currC).filter(([tnr, tnc]) => this.grid.isEmpty(tnr, tnc)).length;
-            console.log(`[EXTENSION] Color: ${path.color}, Old End: (${r},${c}), New End: (${currR},${currC}), Direction: ${direction}, Empty Neighbors: ${emptyNeighbors}`);
+            // console.log(`[EXTENSION] Color: ${path.color}, Old End: (${r},${c}), New End: (${currR},${currC}), Direction: ${direction}, Empty Neighbors: ${emptyNeighbors}`);
 
             return true; // Made a move, exit
         }

@@ -4,20 +4,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dot Connections Generator</title>
+  <title>Connect The Dots!</title>
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 
 <body>
   <div id="app">
     <header>
-      <h1>Dot Connections</h1>
+      <h1>Connect <span id="title-colored">The Dots</span>!</h1>
     </header>
 
     <main>
       <div class="controls">
-        <label for="grid-size">Grid Size:</label>
-        <input type="number" id="grid-size" min="5" max="20" value="5" />
+        <div class="grid-size-control">
+          <label>Grid Size:</label>
+          <button id="size-decrease" class="size-btn">−</button>
+          <span id="grid-size-display">5</span>
+          <button id="size-increase" class="size-btn">+</button>
+        </div>
         <button id="generate-btn">Generate Puzzle</button>
         <button id="reveal-btn">Reveal Paths</button>
       </div>
@@ -27,8 +31,12 @@
       </div>
 
       <div id="status">Ready</div>
-      <div id="color-legend"></div>
+      <!-- <div id="color-legend"></div> -->
     </main>
+
+    <footer>
+      <p>Created by ole9us and Antigravity</p>
+    </footer>
   </div>
   <script type="module" src="/src/main.js"></script>
 </body>
