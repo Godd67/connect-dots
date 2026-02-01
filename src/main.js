@@ -15,9 +15,24 @@ let isDrawing = false;
 let activePathId = null;
 let lastCell = null; // [r, c] last cell user touched
 
-const CELL_SIZE = 50;
-const DOT_RADIUS = 16;
+// Rendering constants
+const DEFAULT_CELL_SIZE = 50;
+const DOT_RADIUS_RATIO = 0.32; // DOT_RADIUS as ratio of CELL_SIZE
 const PADDING = 20;
+
+// Dynamic values (recalculated on generate)
+let CELL_SIZE = DEFAULT_CELL_SIZE;
+let DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
+
+function isMobile() {
+  return window.innerWidth <= 768;
+}
+
+function calculateCellSize(gridSize) {
+  if (!isMobile()) return DEFAULT_CELL_SIZE;
+  const maxWidth = window.innerWidth - PADDING * 2 - 20; // 20 extra for safety margin
+  return Math.floor(maxWidth / gridSize);
+}
 
 function init() {
   generateBtn.addEventListener('click', generate);
@@ -220,6 +235,10 @@ function generate() {
     return;
   }
 
+  // Recalculate dynamic sizing for mobile
+  CELL_SIZE = calculateCellSize(size);
+  DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
+
   statusEl.textContent = "Generating...";
   generateBtn.disabled = true;
 
@@ -240,10 +259,10 @@ function generate() {
 
       if (success) {
         statusEl.textContent = `Generated in ${Math.round(t1 - t0)}ms`;
-        statusEl.style.color = "#888"; // Reset color
+        statusEl.style.color = "#888";
         statusEl.style.fontWeight = "normal";
-        showPaths = false; // Reset reveal state on new generation
-        userPaths = {}; // Clear user paths
+        showPaths = false;
+        userPaths = {};
         revealBtn.textContent = "Reveal Paths";
         draw();
         renderColorLegend();
