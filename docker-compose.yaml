@@ -1,0 +1,7 @@
+services:
+  game:
+    build: .
+    container_name: dot-connections-game
+    ports:
+      - "80:80"
+    restart: always

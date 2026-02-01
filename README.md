@@ -20,8 +20,15 @@ A vibrant, interactive dot-connection puzzle game built with Vanilla JS and Vite
    ```
 
 ## 🐳 Docker Deployment (Ubuntu Server)
-We provide a multi-stage Dockerfile for easy deployment.
+We provide a multi-stage Dockerfile and a docker-compose configuration for easy deployment.
 
+### Option 1: Using Docker Compose (Recommended)
+1. Run with one command:
+   ```bash
+   docker compose up -d
+   ```
+
+### Option 2: Using Docker CLI
 1. Build the image:
    ```bash
    docker build -t connect-dots .
