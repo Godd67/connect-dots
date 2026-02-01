@@ -64,28 +64,34 @@ function init() {
 
   // Touch Events
   canvas.addEventListener('touchstart', (e) => {
+    // We don't preventDefault here to allow the browser to detect gestures
     if (e.touches.length === 1) {
-      e.preventDefault();
       const touch = e.touches[0];
       handlePointerDown(touch);
     } else {
-      // More than one finger: stop drawing to allow zoom
+      // Multi-touch: definitely not drawing
       isDrawing = false;
       activePathId = null;
     }
-  }, { passive: false });
+  }, { passive: true }); // Use passive: true to stay out of the browser's way
 
   window.addEventListener('touchmove', (e) => {
     if (e.touches.length === 1) {
+      // Only prevent scrolling if we are actively drawing a path
       if (isDrawing) {
         e.preventDefault();
       }
       const touch = e.touches[0];
       handlePointerMove(touch);
+    } else {
+      // Multi-touch move: ensure drawing state is cleared
+      isDrawing = false;
+      activePathId = null;
     }
   }, { passive: false });
 
   window.addEventListener('touchend', handlePointerUp);
+  window.addEventListener('touchcancel', handlePointerUp);
 
   // Colorize title
   colorizeTitle();

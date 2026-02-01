@@ -83,22 +83,23 @@ button:hover {
   border-color: #fff;
 }
 
+canvas {
+  background: #222;
+  border-radius: 4px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  touch-action: auto;
+  cursor: pointer;
+  display: block;
+}
+
 .canvas-container {
   display: flex;
   justify-content: center;
   align-items: center;
   margin: 20px auto;
-  overflow-x: auto;
   max-width: 100%;
-}
-
-canvas {
-  background: #222;
-  border-radius: 4px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  touch-action: pan-x pan-y pinch-zoom;
-  cursor: pointer;
-  display: block;
+  overflow: visible;
+  /* Prevent scrollbars from stealing gestures */
 }
 
 #color-legend {
