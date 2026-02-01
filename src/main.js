@@ -21,8 +21,10 @@ let lastCell = null; // [r, c] last cell user touched
 
 // Rendering constants
 const DEFAULT_CELL_SIZE = 50;
-const DOT_RADIUS_RATIO = 0.32; // DOT_RADIUS as ratio of CELL_SIZE
+const DOT_RADIUS_RATIO = 0.38; // Increased from 0.32 to fit numbers better
 const PADDING = 20;
+
+const dpr = window.devicePixelRatio || 1;
 
 // Dynamic values (recalculated on generate)
 let CELL_SIZE = DEFAULT_CELL_SIZE;
@@ -130,6 +132,13 @@ function init() {
 
   // Colorize title
   colorizeTitle();
+
+  // Populate build info
+  const buildInfoEl = document.getElementById('build-info');
+  if (buildInfoEl) {
+    const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
+    buildInfoEl.textContent = `v1.0.0-${buildNum}`;
+  }
 
   // Initial generation
   generate();
@@ -359,7 +368,11 @@ function generate() {
 
   // Recalculate dynamic sizing for mobile
   CELL_SIZE = calculateCellSize(size);
-  DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
+
+  // Make dot size relative to grid size (smaller ratio for smaller grids to avoid "clunky" look)
+  // 5x5 -> 0.28, 20x20 -> 0.38
+  const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
+  DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
 
   statusEl.textContent = "Generating...";
   generateBtn.disabled = true;
@@ -402,14 +415,19 @@ function draw() {
   const width = size * CELL_SIZE + PADDING * 2;
   const height = size * CELL_SIZE + PADDING * 2;
 
-  // Only reset dimensions if they actually changed (prevents flicker)
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+  // Handle High-DPI (Retina) scaling
+  if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
   }
 
+  ctx.resetTransform();
+  ctx.scale(dpr, dpr);
+
   ctx.fillStyle = '#222';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, width, height);
 
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
@@ -621,18 +639,17 @@ function drawDot(r, c, color, pathId) {
   ctx.arc(x, y, DOT_RADIUS, 0, Math.PI * 2);
   ctx.fill();
 
-  // Add border for better visibility
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = Math.max(1, DOT_RADIUS / 8);
-  ctx.stroke();
+
 
   // Draw path number in center (scaled to fit inside dot)
-  const fontSize = Math.max(10, Math.floor(DOT_RADIUS * 0.9));
+  const fontSize = Math.floor(DOT_RADIUS * 1.15);
   ctx.fillStyle = '#000';
-  ctx.font = `bold ${fontSize}px Arial`;
+  ctx.font = `bold ${fontSize}px Inter, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(pathId.toString(), x, y);
+
+  // Draw the text (nudged down slightly by 10% of radius for better visual centering)
+  ctx.fillText(pathId.toString(), x, y + (DOT_RADIUS * 0.1));
 }
 
 function renderColorLegend() {

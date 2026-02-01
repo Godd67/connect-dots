@@ -180,3 +180,9 @@ footer p {
     height: auto !important;
   }
 }
+
+#build-info {
+  font-size: 0.8rem;
+  opacity: 0.5;
+  margin-top: 5px;
+}
