@@ -64,15 +64,25 @@ function init() {
 
   // Touch Events
   canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handlePointerDown(touch);
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      handlePointerDown(touch);
+    } else {
+      // More than one finger: stop drawing to allow zoom
+      isDrawing = false;
+      activePathId = null;
+    }
   }, { passive: false });
 
   window.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    handlePointerMove(touch);
+    if (e.touches.length === 1) {
+      if (isDrawing) {
+        e.preventDefault();
+      }
+      const touch = e.touches[0];
+      handlePointerMove(touch);
+    }
   }, { passive: false });
 
   window.addEventListener('touchend', handlePointerUp);
@@ -268,8 +278,21 @@ function toggleReveal() {
   draw();
 }
 
+function resetGameState() {
+  showPaths = false;
+  userPaths = {};
+  isDrawing = false;
+  activePathId = null;
+  lastCell = null;
+  revealBtn.textContent = "Reveal Paths";
+}
+
 function generate() {
   const size = gridSize;
+
+  // Reset state and switch to a fresh empty grid immediately
+  resetGameState();
+  grid = new Grid(size);
 
   // Recalculate dynamic sizing for mobile
   CELL_SIZE = calculateCellSize(size);
@@ -282,11 +305,9 @@ function generate() {
   setTimeout(() => {
     try {
       const t0 = performance.now();
-      grid = new Grid(size);
       const generator = new Generator(grid);
 
       let success = false;
-      // Single attempt (Generator handles its own 500 retries)
       if (generator.generate()) {
         success = true;
       }
@@ -295,6 +316,8 @@ function generate() {
 
       if (success) {
         statusEl.textContent = `Generated in ${Math.round(t1 - t0)}ms`;
+        statusEl.style.color = "#888";
+        statusEl.style.fontWeight = "normal";
         draw();
         renderColorLegend();
       } else {
@@ -316,11 +339,14 @@ function draw() {
   const width = size * CELL_SIZE + PADDING * 2;
   const height = size * CELL_SIZE + PADDING * 2;
 
-  canvas.width = width;
-  canvas.height = height;
+  // Only reset dimensions if they actually changed (prevents flicker)
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
 
   ctx.fillStyle = '#222';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
@@ -433,7 +459,9 @@ function draw() {
     const points = userPaths[pathId];
     if (points.length > 0) {
       const path = grid.paths.find(p => p.id === parseInt(pathId));
-      drawUserPath(points, path.color);
+      if (path) {
+        drawUserPath(points, path.color);
+      }
     }
   }
 
