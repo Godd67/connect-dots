@@ -3,5 +3,6 @@ services:
     build: .
     container_name: dot-connections-game
     ports:
-      - "80:80"
+      - "7777:80"
+    network_mode: bridge # Fixes "could not find available IPv4 address pool" error
     restart: always
