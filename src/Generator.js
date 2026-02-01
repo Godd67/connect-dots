@@ -12,24 +12,30 @@ export class Generator {
 
             // Phase 1: Generative greedy placement
             if (this.fillGreedy()) {
-                // Phase 2: Linear Expansion (Momentum based)
-                this.expandPathsLinear();
+                // Phase 2: Random Expansion (Shape forming)
+                this.expandPathsRandom(false);
 
                 // Phase 3: Prune "dumb" geometric loops (optimization)
                 // This is the FINAL step to ensure no artifacts remain.
                 this.tightenPaths();
 
-                // Phase 4: Re-Expand Linear
-                // Re-filling voids created by tightening, but STRICTLY linearly to avoid loops.
-                this.expandPathsLinear();
+                // Phase 4: Re-Expand Random
+                // Re-filling voids created by tightening. 
+                // THESE are the "extensions" user wants to see distinguished.
+                this.expandPathsRandom(true);
 
                 // Phase 5: Final Validation
                 if (this.validateGrid()) {
                     console.log(`Generated valid grid on attempt ${attempt + 1}`);
                     return true;
+                } else {
+                    // console.log("Validation failed on attempt", attempt);
                 }
+            } else {
+                // console.log("Fill greedy failed on attempt", attempt);
             }
         }
+        console.error("Failed to generate grid after 500 attempts");
         return false;
     }
 
@@ -69,6 +75,8 @@ export class Generator {
                 // 3. If shorter, keep it. If not, revert.
                 if (newPoints && newPoints.length < path.points.length) {
                     path.points = newPoints;
+                    // Reset point types to Core (0)
+                    path.pointTypes = new Array(newPoints.length).fill(0);
                     improved = true;
                 }
 
@@ -109,8 +117,26 @@ export class Generator {
 
         // Remove A from list to pick B
         empties.splice(idxA, 1);
-        const idxB = Math.floor(Math.random() * empties.length);
-        const end = empties[idxB];
+
+        // For the FIRST pair only: ensure endpoints are at least 2/3 of grid height apart
+        let candidateList = empties;
+        if (this.grid.paths.length === 0) {
+            const minDistance = Math.floor(this.grid.size * 2 / 3);
+            const validCandidates = empties.filter(([r, c]) => {
+                const distance = Math.abs(r - start[0]) + Math.abs(c - start[1]);
+                return distance >= minDistance;
+            });
+
+            // If valid candidates exist, use them; otherwise fall back to all empties
+            if (validCandidates.length > 0) {
+                candidateList = validCandidates;
+            }
+        }
+
+        if (candidateList.length === 0) return false;
+
+        const idxB = Math.floor(Math.random() * candidateList.length);
+        const end = candidateList[idxB];
 
         // 2. Find Shortest Path (BFS)
         const pathPoints = this.findShortestPath(start, end);
@@ -128,6 +154,8 @@ export class Generator {
             this.grid.paths.push({
                 id: pathId,
                 points: pathPoints,
+                // Initialize point types (0 = core)
+                pointTypes: new Array(pathPoints.length).fill(0),
                 color: this.getDistinctColor(pathId)
             });
             return true;
@@ -136,29 +164,32 @@ export class Generator {
         return false;
     }
 
-    expandPathsLinear() {
+    expandPathsRandom(isExtension = false) {
         let changed = true;
         let iterations = 0;
 
         // Loop until no more expansions are possible
-        while (changed && iterations < 50) {
+        // Increased limit for larger grids (20x20 = 400 cells)
+        while (changed && iterations < 1000) {
             changed = false;
             iterations++;
             // Shuffle to vary the order of processing paths
             this.shuffle(this.grid.paths);
 
             for (const path of this.grid.paths) {
-                if (this.expandEndpointLinearly(path, 0)) {
+                // Try expanding Start
+                if (this.expandEndpointRandom(path, 0, isExtension)) {
                     changed = true;
                 }
-                if (this.expandEndpointLinearly(path, path.points.length - 1)) {
+                // Try expanding End
+                if (this.expandEndpointRandom(path, path.points.length - 1, isExtension)) {
                     changed = true;
                 }
             }
         }
     }
 
-    expandEndpointLinearly(path, index) {
+    expandEndpointRandom(path, index, isExtension) {
         // Get start position
         const [r, c] = path.points[index];
         const isStart = (index === 0);
@@ -168,11 +199,23 @@ export class Generator {
 
         // Determine CURRENT direction of the path at this endpoint
         let prevDir = null;
+        let prevSegmentLength = 0;
+
         if (path.points.length > 1) {
-            // If start, direction is [0] - [1]
-            // If end, direction is [last] - [last-1]
+            // If tip is at 0 (Start), the path goes 0 -> 1.
+            // So the "arriving" direction to tip was (0 - 1).
+            // Wait, usually direction is "forward".
+            // If we extend 0, we are moving AWAY from 1.
+            // Direction = (0 - 1).
+
+            // If tip is at End (N), path goes N-1 -> N.
+            // Direction = (N - (N-1)).
+
             const [pr, pc] = isStart ? path.points[1] : path.points[path.points.length - 2];
             prevDir = [r - pr, c - pc];
+
+            // Re-use helper to measure segment
+            prevSegmentLength = this.measureStraightSegment(path, index, prevDir);
         }
 
         // 1. Find all valid empty neighbors
@@ -180,85 +223,117 @@ export class Generator {
 
         if (neighbors.length === 0) return false;
 
-        // 2. Evaluate each neighbor to see how far we can extend linearly
-        const candidates = neighbors.map(neighbor => {
-            const dir = [neighbor[0] - r, neighbor[1] - c];
-            let steps = 0;
-            let currR = neighbor[0];
-            let currC = neighbor[1];
+        // 2. Random Selection Loop
+        // "if the first selected is not valid... try other options"
+        this.shuffle(neighbors);
 
-            // Check availability for the FIRST step
-            if (this.areNeighbors(currR, currC, otherR, otherC)) {
-                return { neighbor, dir, steps: 0, degree: 0 };
-            }
-            steps = 1;
-
-            // Simulate forward
-            while (true) {
-                const nextR = currR + dir[0];
-                const nextC = currC + dir[1];
-
-                // Check Bounds
-                if (!this.grid.isValid(nextR, nextC)) break;
-                // Check Empty
-                if (!this.grid.isEmpty(nextR, nextC)) break;
-                // Check Constraint (Distance to other endpoint)
-                if (this.areNeighbors(nextR, nextC, otherR, otherC)) break;
-
-                // Valid step
-                steps++;
-                currR = nextR;
-                currC = nextC;
+        for (const [nr, nc] of neighbors) {
+            // Check Constraint 1: Don't touch other endpoint
+            if (this.areNeighbors(nr, nc, otherR, otherC)) {
+                console.log(`[SKIP] Color: ${path.color}, Pos: (${r},${c}), Neighbor: (${nr},${nc}) - Would touch other endpoint`);
+                continue;
             }
 
-            // Warnsdorff score
-            const degree = this.getEmptyNeighborCount(neighbor[0], neighbor[1]);
+            // Check Constraint 2: No U-Shaped Turns
+            // A U-shape is when you turn 90°, go 1 step, then turn 90° back toward where you came from.
+            // Example: East → South (1 step) → West creates a U-shape
+            // We need to look at the direction BEFORE the previous segment to detect this.
+            if (prevDir && prevSegmentLength < 2 && path.points.length >= 3) {
+                const newDir = [nr - r, nc - c];
 
-            return { neighbor, dir, steps, degree };
-        });
+                // Get the direction from 2 segments ago
+                // If we're at the start (index 0), look at points[2] -> points[1]
+                // If we're at the end, look at points[N-3] -> points[N-2]
+                let dirBeforePrev = null;
+                if (isStart && path.points.length >= 3) {
+                    const p0 = path.points[0];  // current tip
+                    const p1 = path.points[1];  // 1 back
+                    const p2 = path.points[2];  // 2 back
+                    dirBeforePrev = [p1[0] - p2[0], p1[1] - p2[1]];
+                } else if (!isStart && path.points.length >= 3) {
+                    const pN = path.points[path.points.length - 1];  // current tip
+                    const pN1 = path.points[path.points.length - 2]; // 1 back
+                    const pN2 = path.points[path.points.length - 3]; // 2 back
+                    dirBeforePrev = [pN1[0] - pN2[0], pN1[1] - pN2[1]];
+                }
 
-        // 3. Filter candidates
-        const validCandidates = candidates.filter(c => {
-            if (c.steps <= 0) return false;
+                // If the new direction is OPPOSITE to the direction from 2 segments ago, it's a U-shape
+                if (dirBeforePrev) {
+                    const isUShape = (newDir[0] === -dirBeforePrev[0] && newDir[1] === -dirBeforePrev[1]);
 
-            // STRICT ANTI-ZIGZAG RULE:
-            // If this move is a TURN (dir != prevDir) AND steps < 2, disallow it.
-            // We only allow 1-step moves if we are continuing straight.
-            if (prevDir) {
-                const isTurn = (c.dir[0] !== prevDir[0] || c.dir[1] !== prevDir[1]);
-                if (isTurn && c.steps < 2) {
-                    return false;
+                    if (isUShape) {
+                        const dirMap = { '0,1': 'East', '0,-1': 'West', '1,0': 'South', '-1,0': 'North' };
+                        const attemptedDir = dirMap[`${newDir[0]},${newDir[1]}`] || 'Unknown';
+                        const prevDirStr = dirMap[`${prevDir[0]},${prevDir[1]}`] || 'Unknown';
+                        const beforePrevStr = dirMap[`${dirBeforePrev[0]},${dirBeforePrev[1]}`] || 'Unknown';
+                        console.log(`[SKIP] Color: ${path.color}, Pos: (${r},${c}), Neighbor: (${nr},${nc}) - U-shape blocked (${beforePrevStr} → ${prevDirStr} → ${attemptedDir})`);
+                        continue;
+                    }
                 }
             }
-            return true;
-        });
 
-        if (validCandidates.length === 0) return false;
+            // If we got here, this neighbor is valid. Execute.
+            let currR = nr;
+            let currC = nc;
 
-        validCandidates.sort((a, b) => {
-            // Priority 1: Maximize Steps
-            if (b.steps !== a.steps) return b.steps - a.steps;
-
-            // Priority 2: Minimize Degree
-            return a.degree - b.degree;
-        });
-
-        // 4. Execute the Best Move
-        const best = validCandidates[0];
-
-        // Perform the run
-        let currR = r;
-        let currC = c;
-        for (let i = 0; i < best.steps; i++) {
-            currR += best.dir[0];
-            currC += best.dir[1];
+            const type = isExtension ? 1 : 0;
 
             this.grid.setCell(currR, currC, path.id);
-            if (isStart) path.points.unshift([currR, currC]);
-            else path.points.push([currR, currC]);
+
+            if (isStart) {
+                path.points.unshift([currR, currC]);
+                path.pointTypes.unshift(type);
+            } else {
+                path.points.push([currR, currC]);
+                path.pointTypes.push(type);
+            }
+
+            // Debug logging for extensions
+            const dirMap = { '0,1': 'East', '0,-1': 'West', '1,0': 'South', '-1,0': 'North' };
+            const direction = dirMap[`${currR - r},${currC - c}`] || 'Unknown';
+            const emptyNeighbors = this.getNeighbors(currR, currC).filter(([tnr, tnc]) => this.grid.isEmpty(tnr, tnc)).length;
+            console.log(`[EXTENSION] Color: ${path.color}, Old End: (${r},${c}), New End: (${currR},${currC}), Direction: ${direction}, Empty Neighbors: ${emptyNeighbors}`);
+
+            return true; // Made a move, exit
         }
 
-        return true;
+        // No valid neighbors found
+        return false;
+    }
+
+    measureStraightSegment(path, index, tipDir) {
+        const isStart = (index === 0);
+        let count = 0;
+
+        if (isStart) {
+            // Tip is at 0. Direction tipDir is vector pointing 1->0 (e.g. Up).
+            // We scan 0->1, 1->2, ...
+            // Segment 0->1 must match tipDir.
+            for (let i = 0; i < path.points.length - 1; i++) {
+                const curr = path.points[i];
+                const next = path.points[i + 1];
+                // Vector from next to curr: curr - next
+                if (curr[0] - next[0] === tipDir[0] && curr[1] - next[1] === tipDir[1]) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            // Tip is at End. Direction tipDir is vector pointing N-1 -> N.
+            // We scan N->N-1, N-1->N-2...
+            for (let i = path.points.length - 1; i > 0; i--) {
+                const curr = path.points[i];
+                const prev = path.points[i - 1];
+                // Vector from prev to curr: curr - prev
+                if (curr[0] - prev[0] === tipDir[0] && curr[1] - prev[1] === tipDir[1]) {
+                    count++;
+                } else {
+                    break;
+                }
+            }
+        }
+        return count;
     }
 
     areNeighbors(r1, c1, r2, c2) {
@@ -266,22 +341,10 @@ export class Generator {
     }
 
     getDistinctColor(index) {
-        // curated distinct palette
-        const palette = [
-            '#FF0000', // Red
-            '#00FF00', // Green (The ONLY Green)
-            '#0000FF', // Blue
-            '#FFFF00', // Yellow
-            '#FF00FF', // Magenta
-            '#00FFFF', // Cyan
-            '#FFA500', // Orange
-            '#A52A2A', // Brown
-            '#800080', // Purple
-            '#FFC0CB', // Pink
-            '#FFFFFF', // White
-            '#808080', // Gray
-        ];
-        return palette[(index - 1) % palette.length];
+        // Use golden ratio (137.5 degrees) for maximum color distinction
+        // This ensures every path gets a unique, maximally separated color
+        const hue = ((index - 1) * 137.5) % 360;
+        return `hsl(${hue}, 85%, 60%)`;
     }
 
     getEmptyNeighborCount(r, c) {

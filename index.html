@@ -1,31 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dot Connections Generator</title>
-    <link rel="stylesheet" href="./src/style.css" />
-  </head>
-  <body>
-    <div id="app">
-      <header>
-        <h1>Dot Connections</h1>
-      </header>
-      
-      <main>
-        <div class="controls">
-          <label for="grid-size">Grid Size:</label>
-          <input type="number" id="grid-size" min="5" max="10" value="5" />
-          <button id="generate-btn">Generate Puzzle</button>
-        </div>
-        
-        <div class="canvas-container">
-          <canvas id="game-canvas"></canvas>
-        </div>
-        
-        <div id="status">Ready</div>
-      </main>
-    </div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dot Connections Generator</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+
+<body>
+  <div id="app">
+    <header>
+      <h1>Dot Connections</h1>
+    </header>
+
+    <main>
+      <div class="controls">
+        <label for="grid-size">Grid Size:</label>
+        <input type="number" id="grid-size" min="5" max="20" value="5" />
+        <button id="generate-btn">Generate Puzzle</button>
+        <button id="reveal-btn">Reveal Paths</button>
+      </div>
+
+      <div class="canvas-container">
+        <canvas id="game-canvas"></canvas>
+      </div>
+
+      <div id="status">Ready</div>
+      <div id="color-legend"></div>
+    </main>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+
 </html>
