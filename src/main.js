@@ -382,6 +382,7 @@ function resetGameState() {
   activePathId = null;
   lastCell = null;
   revealBtn.textContent = "Hint";
+  revealBtn.disabled = false; // Enable hint for generated levels
   updateTitle(false);
 }
 
@@ -401,7 +402,8 @@ function generate() {
   DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
 
   generateBtn.disabled = true;
-  levelCodeInput.value = ''; // Clear code on new game
+  generateBtn.disabled = true;
+
 
 
   // Allow UI to update
@@ -420,6 +422,7 @@ function generate() {
       if (success) {
         draw();
         renderColorLegend();
+        exportLevelCode();
       } else {
         console.error("Failed to generate valid board. Try again.");
       }
@@ -811,6 +814,10 @@ function loadLevelCode() {
     renderColorLegend();
     // Clear status or show success? Title resets to Connect The Dots!
     updateTitle(false);
+
+    // Disable Hint for imported levels (Solution unknown)
+    revealBtn.disabled = true;
+    revealBtn.textContent = "No Hint";
 
   } catch (e) {
     alert("Invalid Level Code: " + e.message);
