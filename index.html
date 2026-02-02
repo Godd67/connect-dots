@@ -23,6 +23,10 @@
           <button id="size-increase" class="size-btn">+</button>
         </div>
         <button id="generate-btn">Generate</button>
+        <div class="hard-mode-control">
+          <input type="checkbox" id="hard-mode-cb">
+          <label for="hard-mode-cb">Hard</label>
+        </div>
         <button id="reveal-btn">Hint</button>
       </div>
 
@@ -30,7 +34,14 @@
         <canvas id="game-canvas"></canvas>
       </div>
 
-      <div id="status">Ready</div>
+
+      <!-- Level Code Section -->
+      <div class="level-code-container">
+        <input type="text" id="level-code-input" placeholder="Paste Level Code Here..." />
+        <button id="load-code-btn">Load</button>
+        <button id="copy-code-btn">Copy</button>
+      </div>
+
       <!-- <div id="color-legend"></div> -->
     </main>
 

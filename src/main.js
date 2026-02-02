@@ -5,10 +5,15 @@ const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const generateBtn = document.getElementById('generate-btn');
 const revealBtn = document.getElementById('reveal-btn');
-const statusEl = document.getElementById('status');
 const sizeDisplay = document.getElementById('grid-size-display');
 const sizeDecreaseBtn = document.getElementById('size-decrease');
 const sizeIncreaseBtn = document.getElementById('size-increase');
+const hardModeCb = document.getElementById('hard-mode-cb');
+
+// Level Code UI
+const levelCodeInput = document.getElementById('level-code-input');
+const loadCodeBtn = document.getElementById('load-code-btn');
+const copyCodeBtn = document.getElementById('copy-code-btn');
 
 let gridSize = 5; // Current grid size
 
@@ -80,6 +85,16 @@ function init() {
     }
   });
 
+  loadCodeBtn.addEventListener('click', loadLevelCode);
+  copyCodeBtn.addEventListener('click', () => {
+    levelCodeInput.select();
+    navigator.clipboard.writeText(levelCodeInput.value).then(() => {
+      const originalText = copyCodeBtn.textContent;
+      copyCodeBtn.textContent = 'Copied!';
+      setTimeout(() => copyCodeBtn.textContent = originalText, 1500);
+    });
+  });
+
   // Mouse Events
   canvas.addEventListener('mousedown', handlePointerDown);
   window.addEventListener('mousemove', handlePointerMove);
@@ -130,8 +145,7 @@ function init() {
   window.addEventListener('touchend', handlePointerUp);
   window.addEventListener('touchcancel', handlePointerUp);
 
-  // Colorize title
-  colorizeTitle();
+
 
   // Populate build info
   const buildInfoEl = document.getElementById('build-info');
@@ -142,23 +156,32 @@ function init() {
 
   // Initial generation
   generate();
+  // Ensure title is correct initially
+  updateTitle(false);
 }
 
-function colorizeTitle() {
-  const titleSpan = document.getElementById('title-colored');
-  if (!titleSpan) return;
+function updateTitle(isWin) {
+  const h1 = document.querySelector('header h1');
+  if (!h1) return;
 
-  const text = titleSpan.textContent;
-  titleSpan.innerHTML = '';
+  const text = "The Dots";
+  let spansHtml = '';
 
   for (let i = 0; i < text.length; i++) {
-    const span = document.createElement('span');
-    span.textContent = text[i];
-    if (text[i] !== ' ') {
-      const hue = (i * 137.5) % 360;
-      span.style.color = `hsl(${hue}, 85%, 60%)`;
-    }
-    titleSpan.appendChild(span);
+    const char = text[i];
+    // Add jitter class only if won
+    const classes = isWin ? 'jitter' : '';
+    // Space handling: wrap it too to keep nth-child count consistent
+    const content = char === ' ' ? '&nbsp;' : char;
+    spansHtml += `<span class="${classes}">${content}</span>`;
+  }
+
+  const coloredSpan = `<span id="title-colored">${spansHtml}</span>`;
+
+  if (isWin) {
+    h1.innerHTML = `${coloredSpan} connected!`;
+  } else {
+    h1.innerHTML = `Connect ${coloredSpan}!`;
   }
 }
 
@@ -231,7 +254,10 @@ function handlePointerMove(e) {
     // 1. Is it a stone? 
     const cellVal = grid.cells[r][c];
     if (cellVal === 0 && !isTargetDot) {
-      return; // It's a stone!
+      // If imported level, allow drawing on 0 (empty space)
+      if (!grid.isImported) {
+        return; // It's a stone!
+      }
     }
 
     // 2. Is it a dot of ANOTHER path?
@@ -343,9 +369,8 @@ function checkWin() {
 
   if (allConnected) {
     console.log("ALL PATHS CONNECTED!");
-    statusEl.textContent = "PUZZLE SOLVED! WELL DONE!";
-    statusEl.style.color = "#4CAF50";
-    statusEl.style.fontWeight = "bold";
+    updateTitle(true);
+    exportLevelCode();
   }
 }
 
@@ -357,6 +382,7 @@ function resetGameState() {
   activePathId = null;
   lastCell = null;
   revealBtn.textContent = "Hint";
+  updateTitle(false);
 }
 
 function generate() {
@@ -374,14 +400,15 @@ function generate() {
   const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
   DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
 
-  statusEl.textContent = "Generating...";
   generateBtn.disabled = true;
+  levelCodeInput.value = ''; // Clear code on new game
+
 
   // Allow UI to update
   setTimeout(() => {
     try {
       const t0 = performance.now();
-      const generator = new Generator(grid);
+      const generator = new Generator(grid, { hardMode: hardModeCb.checked });
 
       let success = false;
       if (generator.generate()) {
@@ -391,17 +418,13 @@ function generate() {
       const t1 = performance.now();
 
       if (success) {
-        statusEl.textContent = `Generated in ${Math.round(t1 - t0)}ms`;
-        statusEl.style.color = "#888";
-        statusEl.style.fontWeight = "normal";
         draw();
         renderColorLegend();
       } else {
-        statusEl.textContent = "Failed to generate valid board. Try again.";
+        console.error("Failed to generate valid board. Try again.");
       }
     } catch (e) {
       console.error("Generation crashed:", e);
-      statusEl.textContent = "Error: " + e.message;
     } finally {
       generateBtn.disabled = false;
     }
@@ -436,12 +459,17 @@ function draw() {
       const cellVal = grid.cells[r][c];
 
       if (cellVal === 0) {
+        if (grid.isImported) {
+          // Draw nothing (black background) for imported empty cells
+          continue;
+        }
+
         // Draw stone-like obstacle with rounded corners and shadow
-        const padding = 4;
+        const padding = Math.max(2, CELL_SIZE * 0.08);
         const stoneX = x + padding;
         const stoneY = y + padding;
         const stoneSize = CELL_SIZE - padding * 2;
-        const radius = 8;
+        const radius = stoneSize * 0.15;
 
         // Add variety by using cell position to vary appearance slightly
         const variation = (r * 7 + c * 11) % 3;
@@ -691,6 +719,102 @@ function renderColorLegend() {
   });
 
   legendEl.appendChild(legendContainer);
+}
+
+// ------------------------------------
+// Level Code Logic (Base36)
+// ------------------------------------
+
+function toBase36(n) {
+  return n.toString(36);
+}
+
+function fromBase36(char) {
+  return parseInt(char, 36);
+}
+
+function exportLevelCode() {
+  if (!grid) return;
+  // Code Format: [Size][StartR][StartC][EndR][EndC]...
+  let code = toBase36(grid.size);
+
+  grid.paths.forEach(p => {
+    const start = p.points[0];
+    const end = p.points[p.points.length - 1];
+    code += toBase36(start[0]) + toBase36(start[1]) + toBase36(end[0]) + toBase36(end[1]);
+  });
+
+  levelCodeInput.value = code;
+}
+
+function loadLevelCode() {
+  const code = levelCodeInput.value.trim();
+  if (!code) return;
+
+  try {
+    const size = fromBase36(code[0]);
+    if (isNaN(size) || size < 5 || size > 20) throw new Error("Invalid grid size");
+
+    // Reset Game State
+    resetGameState();
+    grid = new Grid(size);
+    // Mark as imported to handle "Empty" drawing rule
+    grid.isImported = true;
+
+    CELL_SIZE = calculateCellSize(size);
+    // Adjust dot radius for size
+    const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
+    DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
+
+    // Parse Paths (Chunks of 4)
+    const body = code.substring(1);
+    if (body.length % 4 !== 0) throw new Error("Invalid code length");
+
+    const numPaths = body.length / 4;
+    // Re-use Generator colors (hardcoded fallback since Generator instance is transient)
+    const colors = [
+      '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#ffa500', '#800080', '#008000', '#000080',
+      '#ffc0cb', '#a52a2a', '#808080', '#ffffff', '#ffd700', '#4b0082', '#40e0d0', '#fa8072', '#ffe4e1', '#d2b48c'
+    ];
+
+    let pathId = 1;
+    for (let i = 0; i < body.length; i += 4) {
+      const r1 = fromBase36(body[i]);
+      const c1 = fromBase36(body[i + 1]);
+      const r2 = fromBase36(body[i + 2]);
+      const c2 = fromBase36(body[i + 3]);
+
+      if ([r1, c1, r2, c2].some(v => isNaN(v) || v < 0 || v >= size)) throw new Error("Invalid coordinate");
+
+      // Register Path
+      // We only know endpoints. Generator usually randomizes ID. We'll sequentialize.
+      const color = colors[(pathId - 1) % colors.length];
+
+      grid.cells[r1][c1] = pathId;
+      grid.cells[r2][c2] = pathId;
+
+      grid.paths.push({
+        id: pathId,
+        color: color,
+        points: [[r1, c1], [r2, c2]], // Only endpoints known
+        isFiller: false
+      });
+
+      pathId++;
+    }
+
+    grid.size = size; // Ensure size is set
+    sizeDisplay.textContent = size; // Update UI
+    gridSize = size; // Sync global state
+
+    draw();
+    renderColorLegend();
+    // Clear status or show success? Title resets to Connect The Dots!
+    updateTitle(false);
+
+  } catch (e) {
+    alert("Invalid Level Code: " + e.message);
+  }
 }
 
 init();

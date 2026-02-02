@@ -5,6 +5,118 @@
   --panel-bg: #2a2a2a;
 }
 
+@keyframes jitter {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  25% {
+    transform: translate(-0.5px, 0.5px) rotate(-0.5deg);
+  }
+
+  50% {
+    transform: translate(0.5px, -0.5px) rotate(0.5deg);
+  }
+
+  75% {
+    transform: translate(-0.5px, -0.5px) rotate(0.2deg);
+  }
+
+  100% {
+    transform: translate(0, 0.5px) rotate(-0.5deg);
+  }
+}
+
+@keyframes hue-rotate {
+  from {
+    filter: hue-rotate(0deg);
+  }
+
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+
+
+/* Base style for title letters */
+#title-colored span {
+  display: inline-block;
+  /* Colors assigned below by index */
+}
+
+/* Animation class - added dynamically */
+#title-colored span.jitter {
+  animation: jitter 0.3s infinite ease-in-out;
+}
+
+/* Ensure children inherit transparency to show gradient */
+#title-colored .jitter {
+  /* Revert to standard text rendering */
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: inherit;
+}
+
+/* Individual Letter Colors and Animation Timing */
+/* T */
+#title-colored span:nth-child(1) {
+  color: #ff595e;
+  animation-delay: 0.1s;
+}
+
+/* h */
+#title-colored span:nth-child(2) {
+  color: #ffca3a;
+  animation-delay: 0.2s;
+}
+
+/* e */
+#title-colored span:nth-child(3) {
+  color: #8ac926;
+  animation-delay: 0.05s;
+}
+
+/* space :nth-child(4) */
+#title-colored span:nth-child(4) {
+  animation-duration: 0.5s;
+  animation-delay: 0s;
+}
+
+/* D */
+#title-colored span:nth-child(5) {
+  color: #1982c4;
+  animation-delay: 0.15s;
+}
+
+/* o */
+#title-colored span:nth-child(6) {
+  color: #6a4c93;
+  animation-delay: 0.3s;
+}
+
+/* t */
+#title-colored span:nth-child(7) {
+  color: #ff9f1c;
+  animation-delay: 0.1s;
+}
+
+/* s */
+#title-colored span:nth-child(8) {
+  color: #4cc9f0;
+  animation-delay: 0.25s;
+}
+
+/* Exclamation mark was typically child 9 if inside, but we'll stick to 8 letters for "The Dots" */
+/* Exclamation mark is inside the span in HTML? No, it's outside in my last edit?
+   Wait, let's check index.html again. Previous edit put '!' outside the span#title-colored. */
+
+h1 .jitter:nth-child(9) {
+  animation-duration: 0.28s;
+  animation-delay: 0.05s;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -40,7 +152,7 @@ body {
   /* Force single line */
   justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   overflow-x: auto;
   /* Allow horizontal scroll if needed on tiny screens */
   scrollbar-width: none;
@@ -78,8 +190,8 @@ body {
 button {
   border-radius: 8px;
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
+  padding: 0.5em 1em;
+  font-size: 0.95em;
   font-weight: 500;
   font-family: inherit;
   background-color: var(--accent-color);
@@ -89,7 +201,21 @@ button {
 }
 
 #reveal-btn {
-  min-width: 135px;
+  min-width: 120px;
+}
+
+.hard-mode-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#hard-mode-cb {
+  cursor: pointer;
+  margin: 0;
 }
 
 button:hover {
@@ -130,10 +256,31 @@ canvas {
   color: #ccc;
 }
 
-#status {
-  min-height: 1.5em;
-  color: #888;
-  margin-top: 10px;
+/* Level Code UI */
+.level-code-container {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  background: var(--panel-bg);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+#level-code-input {
+  background: #333;
+  border: 1px solid #555;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 4px;
+  width: 250px;
+  font-family: monospace;
+  font-size: 1em;
+}
+
+#level-code-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
 }
 
 footer {
@@ -158,24 +305,46 @@ footer p {
     margin: 0.5rem 0;
   }
 
+  .grid-size-control label {
+    display: none;
+  }
+
   .controls {
-    gap: 6px;
-    padding: 6px;
-    justify-content: flex-start;
-    /* Start from left on mobile if scrollable */
+    gap: 4px;
+    padding: 5px;
+    justify-content: center;
+    flex-wrap: nowrap;
   }
 
   button {
-    padding: 0.5em 0.6em;
-    font-size: 0.85em;
+    padding: 0.3em 0.4em;
+    font-size: 0.75em;
     white-space: nowrap;
-    /* Prevent text wrapping inside buttons */
+  }
+
+  #reveal-btn {
+    min-width: 0;
+    width: auto;
+    padding-left: 0.8em;
+    padding-right: 0.8em;
+  }
+
+  .hard-mode-control {
+    font-size: 0.75em;
+    gap: 2px;
+    margin: 0 2px;
+  }
+
+  .grid-size-control {
+    gap: 2px;
   }
 
   .size-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 1.2em;
+    width: 25px;
+    height: 25px;
+    font-size: 1.1em;
+    padding: 0;
+    line-height: 1;
   }
 
   canvas {
