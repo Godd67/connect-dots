@@ -142,6 +142,43 @@ body {
   text-align: center;
 }
 
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  position: relative;
+}
+
+header h1 {
+  flex-grow: 1;
+  margin: 0;
+}
+
+#settings-open-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  opacity: 0.6;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: opacity 0.2s, background-color 0.2s, transform 0.3s;
+}
+
+#settings-open-btn:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: rotate(45deg);
+}
+
+#settings-open-btn svg {
+  display: block;
+}
+
+
 .controls {
   margin-bottom: 20px;
   padding: 10px 15px;
@@ -200,8 +237,19 @@ button {
   transition: border-color 0.25s;
 }
 
+#reset-btn,
 #reveal-btn {
-  min-width: 120px;
+  width: 40px;
+  height: 40px;
+  min-width: unset;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#reveal-btn.no-hint svg {
+  color: #ff4444;
 }
 
 .hard-mode-control {
@@ -320,13 +368,19 @@ footer p {
     padding: 0.3em 0.4em;
     font-size: 0.75em;
     white-space: nowrap;
+    height: 32px;
   }
 
+  #reset-btn,
   #reveal-btn {
-    min-width: 0;
-    width: auto;
-    padding-left: 0.8em;
-    padding-right: 0.8em;
+    width: 32px;
+    height: 32px;
+  }
+
+  #reset-btn svg,
+  #reveal-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
   .hard-mode-control {
@@ -340,12 +394,13 @@ footer p {
   }
 
   .size-btn {
-    width: 25px;
-    height: 25px;
+    width: 32px;
+    height: 32px;
     font-size: 1.1em;
     padding: 0;
     line-height: 1;
   }
+
 
   canvas {
     max-width: 100%;
@@ -357,4 +412,96 @@ footer p {
   font-size: 0.8rem;
   opacity: 0.5;
   margin-top: 5px;
+}
+
+/* Modal System */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.3s ease;
+}
+
+.modal.hidden {
+  display: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-content {
+  background: rgba(42, 42, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2rem;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-content h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.5rem;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  gap: 15px;
+}
+
+.setting-item label {
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.setting-item input[type="number"],
+.setting-item select {
+  background: #333;
+  border: 1px solid #555;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.setting-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.modal-actions {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.primary-btn {
+  background: var(--accent-color);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.2s;
+}
+
+.primary-btn:hover {
+  filter: brightness(1.1);
 }

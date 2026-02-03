@@ -9,13 +9,61 @@ const sizeDisplay = document.getElementById('grid-size-display');
 const sizeDecreaseBtn = document.getElementById('size-decrease');
 const sizeIncreaseBtn = document.getElementById('size-increase');
 const hardModeCb = document.getElementById('hard-mode-cb');
+const resetBtn = document.getElementById('reset-btn');
 
 // Level Code UI
 const levelCodeInput = document.getElementById('level-code-input');
 const loadCodeBtn = document.getElementById('load-code-btn');
 const copyCodeBtn = document.getElementById('copy-code-btn');
 
-let gridSize = 5; // Current grid size
+// Settings UI
+const settingsModal = document.getElementById('settings-modal');
+const settingsOpenBtn = document.getElementById('settings-open-btn');
+const settingsCloseBtn = document.getElementById('settings-close-btn');
+
+const settingDefaultSize = document.getElementById('setting-default-size');
+const settingApplause = document.getElementById('setting-applause');
+const settingNav = document.getElementById('setting-nav');
+
+// Settings Management
+const Settings = {
+  data: {
+    defaultGridSize: 10,
+    applauseSound: true,
+    navMode: 'drag'
+  },
+
+  load() {
+    const saved = localStorage.getItem('dots-settings');
+    if (saved) {
+      try {
+        this.data = { ...this.data, ...JSON.parse(saved) };
+      } catch (e) {
+        console.error("Failed to parse settings", e);
+      }
+    }
+    this.applyToUI();
+  },
+
+  save() {
+    localStorage.setItem('dots-settings', JSON.stringify(this.data));
+  },
+
+  applyToUI() {
+    settingDefaultSize.value = this.data.defaultGridSize;
+    settingApplause.checked = this.data.applauseSound;
+    settingNav.value = this.data.navMode;
+  },
+
+  syncFromUI() {
+    this.data.defaultGridSize = parseInt(settingDefaultSize.value) || 10;
+    this.data.applauseSound = settingApplause.checked;
+    this.data.navMode = settingNav.value;
+    this.save();
+  }
+};
+
+let gridSize = Settings.data.defaultGridSize; // Initialized from settings
 
 let grid = null;
 let showPaths = false;
@@ -37,6 +85,42 @@ let DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
 
 function isMobile() {
   return window.innerWidth <= 768;
+}
+
+function playApplause() {
+  if (!Settings.data.applauseSound) return;
+
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  // Triumphant fanfare melody: C-E-G-C (rising)
+  const notes = [
+    { freq: 261.63, start: 0.0, duration: 0.15 },  // C4
+    { freq: 329.63, start: 0.15, duration: 0.15 }, // E4
+    { freq: 392.00, start: 0.3, duration: 0.15 },  // G4
+    { freq: 523.25, start: 0.45, duration: 0.4 }   // C5 (longer final note)
+  ];
+
+  notes.forEach(note => {
+    const time = audioCtx.currentTime + note.start;
+
+    // Main oscillator (trumpet-like)
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(note.freq, time);
+
+    // Envelope for natural attack/decay
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(0.3, time + 0.02); // Quick attack
+    gain.gain.linearRampToValueAtTime(0.25, time + note.duration * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + note.duration);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(time);
+    osc.stop(time + note.duration);
+  });
 }
 
 function calculateCellSize(gridSize) {
@@ -85,6 +169,12 @@ function init() {
     }
   });
 
+  resetBtn.addEventListener('click', () => {
+    userPaths = {};
+    draw();
+  });
+
+
   loadCodeBtn.addEventListener('click', loadLevelCode);
   copyCodeBtn.addEventListener('click', () => {
     levelCodeInput.select();
@@ -94,6 +184,26 @@ function init() {
       setTimeout(() => copyCodeBtn.textContent = originalText, 1500);
     });
   });
+
+  // Settings Events
+  settingsOpenBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
+  settingsCloseBtn.addEventListener('click', () => {
+    Settings.syncFromUI();
+    settingsModal.classList.add('hidden');
+  });
+
+  // Close modal on outside click
+  window.addEventListener('click', (e) => {
+    if (e.target === settingsModal) {
+      Settings.syncFromUI();
+      settingsModal.classList.add('hidden');
+    }
+  });
+
+  // Load Settings
+  Settings.load();
+  gridSize = Settings.data.defaultGridSize;
+  sizeDisplay.textContent = gridSize;
 
   // Mouse Events
   canvas.addEventListener('mousedown', handlePointerDown);
@@ -368,6 +478,7 @@ function checkWin() {
     console.log("ALL PATHS CONNECTED!");
     updateTitle(true);
     exportLevelCode();
+    playApplause();
   }
 }
 
@@ -378,8 +489,13 @@ function resetGameState() {
   isDrawing = false;
   activePathId = null;
   lastCell = null;
-  revealBtn.textContent = "Hint";
-  revealBtn.disabled = false; // Enable hint for generated levels
+  revealBtn.classList.remove('no-hint');
+  revealBtn.innerHTML = `
+    <svg id="hint-icon" viewBox="0 0 24 24" width="22" height="22">
+      <path fill="currentColor" d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z" />
+    </svg>
+  `;
+  revealBtn.disabled = false;
   updateTitle(false);
 }
 
@@ -557,13 +673,6 @@ function draw() {
   }
   ctx.stroke();
 
-  // Draw Solution Paths (if revealed)
-  if (showPaths) {
-    for (const path of grid.paths) {
-      drawPathSegments(path);
-    }
-  }
-
   // Draw User Paths
   for (const pathId in userPaths) {
     const points = userPaths[pathId];
@@ -572,6 +681,13 @@ function draw() {
       if (path) {
         drawUserPath(points, path.color);
       }
+    }
+  }
+
+  // Draw Solution Paths (if revealed) - NOW OVER user paths
+  if (showPaths) {
+    for (const path of grid.paths) {
+      drawPathSegments(path);
     }
   }
 
@@ -586,10 +702,15 @@ function draw() {
 
 function drawPathSegments(path) {
   const points = path.points;
-  const types = path.pointTypes || new Array(points.length).fill(0);
 
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+
+  ctx.save();
+  // Visual Polish: Hints are thinner and desaturated/distinguishable
+  ctx.lineWidth = CELL_SIZE / 5;
+  ctx.globalAlpha = 0.45;
+  ctx.strokeStyle = path.color || '#fff';
 
   for (let i = 0; i < points.length - 1; i++) {
     const p1 = points[i];
@@ -602,10 +723,9 @@ function drawPathSegments(path) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
-    ctx.lineWidth = CELL_SIZE / 3;
-    ctx.strokeStyle = path.color || '#fff';
     ctx.stroke();
   }
+  ctx.restore();
 }
 
 function drawUserPath(points, color) {
@@ -836,10 +956,14 @@ function loadLevelCode() {
     renderColorLegend();
     updateTitle(false);
 
-    // Re-enable Hint for imported levels by calculating them on the fly
-    calculateHintsForImported();
-    revealBtn.disabled = false;
-    revealBtn.textContent = "Hint";
+    // Disable Hint for imported levels as their full paths are unknown
+    revealBtn.classList.add('no-hint');
+    revealBtn.innerHTML = `
+      <svg id="hint-icon" viewBox="0 0 24 24" width="22" height="22">
+        <path fill="currentColor" d="M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z" />
+      </svg>
+    `;
+    revealBtn.disabled = true;
 
   } catch (e) {
     console.error(e);
@@ -847,40 +971,5 @@ function loadLevelCode() {
   }
 }
 
-function calculateHintsForImported() {
-  if (!grid || !grid.isImported) return;
-
-  grid.paths.forEach(path => {
-    const start = path.points[0];
-    const end = path.points[1];
-
-    // BFS to find a valid path through non-stone cells
-    const queue = [[start]];
-    const visited = new Set([`${start[0]},${start[1]}`]);
-
-    while (queue.length > 0) {
-      const p = queue.shift();
-      const [r, c] = p[p.length - 1];
-
-      if (r === end[0] && c === end[1]) {
-        path.points = p;
-        return;
-      }
-
-      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
-      for (const [nr, nc] of neighbors) {
-        if (nr < 0 || nr >= grid.size || nc < 0 || nc >= grid.size) continue;
-        if (visited.has(`${nr},${nc}`)) continue;
-
-        const val = grid.cells[nr][nc];
-        // Accessible if it's empty (0) or the target dot
-        if (val === 0 || (nr === end[0] && nc === end[1])) {
-          visited.add(`${nr},${nc}`);
-          queue.push([...p, [nr, nc]]);
-        }
-      }
-    }
-  });
-}
 
 init();
