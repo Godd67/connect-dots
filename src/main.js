@@ -312,6 +312,7 @@ function getCellFromCoords(x, y) {
 function handlePointerDown(e) {
   if (!grid) return false;
   const cell = getCellFromCoords(e.clientX, e.clientY);
+
   if (!cell) return false;
 
   const [r, c] = cell;
@@ -363,7 +364,7 @@ function handlePointerMove(e) {
     // Collision detection:
     // 1. Is it a stone? 
     const cellVal = grid.cells[r][c];
-    if ((cellVal === 0 || cellVal === -1) && !isTargetDot) {
+    if (cellVal === -1 && !isTargetDot) {
       return; // It's a stone!
     }
 
@@ -661,7 +662,7 @@ function draw() {
   }
 
   // Draw Grid Lines (for occupied cells too)
-  ctx.strokeStyle = '#333';
+  ctx.strokeStyle = '#444';
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 0; i <= size; i++) {
@@ -952,6 +953,8 @@ function loadLevelCode() {
 
     gridSize = size;
     sizeDisplay.textContent = size;
+
+    // Must call draw() to properly resize canvas before other UI updates
     draw();
     renderColorLegend();
     updateTitle(false);
@@ -964,6 +967,9 @@ function loadLevelCode() {
       </svg>
     `;
     revealBtn.disabled = true;
+
+    // Force a redraw after a short delay to ensure canvas is properly sized
+    setTimeout(() => draw(), 10);
 
   } catch (e) {
     console.error(e);
