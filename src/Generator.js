@@ -32,6 +32,18 @@ export class Generator {
                 // Allow the newly added filler paths (and existing ones) to grow into remaining space
                 this.expandPathsRandom(true);
 
+                // Phase 5.6: Final Pruning (User Request)
+                // Prune any sub-optimal loops formed during expansion/filling phases
+                this.tightenPaths();
+
+                // Phase 5.7: Final Polish Expansion
+                // Last ditch effort to fill any holes created by final tightening
+                this.expandPathsRandom(true);
+
+                // Phase 5.75: Final Clump Cleanup (User Request)
+                // One last check to catch any 3+ clumps that appeared after tightening
+                this.fillSmallVoids();
+
                 // Phase 5.8: Merge Collinear Paths (user request)
                 // Combine adjacent straight segments into one
                 this.mergeCollinearPaths();
@@ -214,84 +226,69 @@ export class Generator {
     fillSmallVoids() {
         const size = this.grid.size;
 
-        // 1. Long Strip Filling (Prioritize longest available run)
-        // Scan grid for empty cells. When found, measure max H vs max V run.
-        // If max >= 3, fill the longer one.
+        // Greedy Longest Path Filling
+        // For every empty cell, try to find the longest simple path we can form starting there.
         for (let r = 0; r < size; r++) {
             for (let c = 0; c < size; c++) {
                 if (!this.grid.isEmpty(r, c)) continue;
 
-                // Measure Horizontal Run
-                let hLen = 0;
-                while (c + hLen < size && this.grid.isEmpty(r, c + hLen)) {
-                    hLen++;
-                }
+                // Try to find the longest linear path possible in the current empty space
+                let path = this.findLongestPathFrom(r, c, 6); // Limit depth to keep it fast
 
-                // Measure Vertical Run
-                let vLen = 0;
-                while (r + vLen < size && this.grid.isEmpty(r + vLen, c)) {
-                    vLen++;
-                }
-
-                const bestLen = Math.max(hLen, vLen);
-
-                if (bestLen >= 3) {
-                    // We can fill a strip!
-                    // Prefer the longer one.
-                    if (vLen > hLen) {
-                        // Vertical Fill
-                        const points = [];
-                        for (let k = 0; k < vLen; k++) {
-                            points.push([r + k, c]);
-                        }
-                        this.addTargetedPath(points);
-                        // No need to manually advance r/c loops violently, 
-                        // the next iterations will see occupied cells and skip.
-                    } else {
-                        // Horizontal Fill (hLen >= vLen)
-                        const points = [];
-                        for (let k = 0; k < hLen; k++) {
-                            points.push([r, c + k]);
-                        }
-                        this.addTargetedPath(points);
-                        // Optimization: Skip these cells in this row
-                        c += (hLen - 1);
-                    }
+                if (path && path.length >= 3) {
+                    this.addTargetedPath(path);
                 }
             }
         }
 
-        // Scan for 2x2 clumps and add L-paths (works in all modes)
-        // Scan for 2x2 clumps and add L-paths (works in all modes)
+        // Keep 2x2 L-shape checks as a fallback for clusters where DFS didn't find a long path
         for (let r = 0; r < size - 1; r++) {
             for (let c = 0; c < size - 1; c++) {
-                // Check all 4 rotations of L-shape in this 2x2 block
-                // 1. Top-Left L: (r,c), (r,c+1), (r+1,c)
-                // 2. Top-Right L: (r,c), (r,c+1), (r+1,c+1)
-                // 3. Bottom-Left L: (r,c), (r+1,c), (r+1,c+1)
-                // 4. Bottom-Right L: (r,c+1), (r+1,c), (r+1,c+1)
-
-                // Prioritize patterns that don't block diagonal connections if possible
-                // But generally just try to fill any we find.
-
-                // 1. Top-Left corner L (path: (r,c+1) -> (r,c) -> (r+1,c))
                 if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c)) {
                     this.addTargetedPath([[r, c + 1], [r, c], [r + 1, c]]);
-                }
-                // 2. Top-Right corner L (path: (r,c) -> (r,c+1) -> (r+1,c+1))
-                else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c + 1)) {
+                } else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c + 1)) {
                     this.addTargetedPath([[r, c], [r, c + 1], [r + 1, c + 1]]);
-                }
-                // 3. Bottom-Left corner L (path: (r,c) -> (r+1,c) -> (r+1,c+1))
-                else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r + 1, c) && this.grid.isEmpty(r + 1, c + 1)) {
+                } else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r + 1, c) && this.grid.isEmpty(r + 1, c + 1)) {
                     this.addTargetedPath([[r, c], [r + 1, c], [r + 1, c + 1]]);
-                }
-                // 4. Bottom-Right corner L (path: (r,c+1) -> (r+1,c+1) -> (r+1,c))
-                else if (this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c) && this.grid.isEmpty(r + 1, c + 1)) {
+                } else if (this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c) && this.grid.isEmpty(r + 1, c + 1)) {
                     this.addTargetedPath([[r, c + 1], [r + 1, c + 1], [r + 1, c]]);
                 }
             }
         }
+    }
+
+    findLongestPathFrom(r, c, maxDepth) {
+        let bestPath = [];
+
+        const dfs = (currR, currC, visited, path) => {
+            if (path.length > bestPath.length) {
+                bestPath = [...path];
+            }
+            if (path.length >= maxDepth) return;
+
+            const neighbors = this.getNeighbors(currR, currC);
+            for (const [nr, nc] of neighbors) {
+                const key = `${nr},${nc}`;
+                if (this.grid.isEmpty(nr, nc) && !visited.has(key)) {
+                    // Self-Touch check: Ensure the new cell doesn't touch the path body (excluding the current tip)
+                    // This maintains "thin" paths.
+                    const samePathNeighbors = this.getNeighbors(nr, nc).filter(([tnr, tnc]) => {
+                        return visited.has(`${tnr},${tnc}`);
+                    });
+
+                    if (samePathNeighbors.length <= 1) {
+                        visited.add(key);
+                        path.push([nr, nc]);
+                        dfs(nr, nc, visited, path);
+                        path.pop();
+                        visited.delete(key);
+                    }
+                }
+            }
+        };
+
+        dfs(r, c, new Set([`${r},${c}`]), [[r, c]]);
+        return bestPath;
     }
 
     addTargetedPath(points) {
@@ -493,8 +490,14 @@ export class Generator {
 
         for (const [nr, nc] of neighbors) {
             // Check Constraint 1: Don't touch other endpoint
-            if (this.areNeighbors(nr, nc, otherR, otherC)) {
-                console.log(`[SKIP] Color: ${path.color}, Pos: (${r},${c}), Neighbor: (${nr},${nc}) - Would touch other endpoint`);
+            // Relax this rule for extensions (Phase 4+) to avoid sub-optimal "spare loops"
+            if (!isExtension && this.areNeighbors(nr, nc, otherR, otherC)) {
+                // console.log(`[SKIP] Color: ${path.color}, Pos: (${r},${c}), Neighbor: (${nr},${nc}) - Would touch other endpoint`);
+                continue;
+            }
+
+            // Check Constraint 1.5: Hard Mode (Endpoints must never share row/col)
+            if (this.hardMode && (nr === otherR || nc === otherC)) {
                 continue;
             }
 

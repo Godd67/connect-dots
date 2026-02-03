@@ -253,11 +253,8 @@ function handlePointerMove(e) {
     // Collision detection:
     // 1. Is it a stone? 
     const cellVal = grid.cells[r][c];
-    if (cellVal === 0 && !isTargetDot) {
-      // If imported level, allow drawing on 0 (empty space)
-      if (!grid.isImported) {
-        return; // It's a stone!
-      }
+    if ((cellVal === 0 || cellVal === -1) && !isTargetDot) {
+      return; // It's a stone!
     }
 
     // 2. Is it a dot of ANOTHER path?
@@ -420,6 +417,12 @@ function generate() {
       const t1 = performance.now();
 
       if (success) {
+        // Explicitly mark stones in generated grid as -1
+        for (let r = 0; r < grid.size; r++) {
+          for (let c = 0; c < grid.size; c++) {
+            if (grid.cells[r][c] === 0) grid.cells[r][c] = -1;
+          }
+        }
         draw();
         renderColorLegend();
         exportLevelCode();
@@ -461,12 +464,7 @@ function draw() {
       const y = PADDING + r * CELL_SIZE;
       const cellVal = grid.cells[r][c];
 
-      if (cellVal === 0) {
-        if (grid.isImported) {
-          // Draw nothing (black background) for imported empty cells
-          continue;
-        }
-
+      if (cellVal === -1) {
         // Draw stone-like obstacle with rounded corners and shadow
         const padding = Math.max(2, CELL_SIZE * 0.08);
         const stoneX = x + padding;
@@ -738,7 +736,7 @@ function fromBase36(char) {
 
 function exportLevelCode() {
   if (!grid) return;
-  // Code Format: [Size][StartR][StartC][EndR][EndC]...
+  // Code Format: [Size][Coords]-[StoneBitmask]
   let code = toBase36(grid.size);
 
   grid.paths.forEach(p => {
@@ -747,12 +745,31 @@ function exportLevelCode() {
     code += toBase36(start[0]) + toBase36(start[1]) + toBase36(end[0]) + toBase36(end[1]);
   });
 
-  levelCodeInput.value = code;
+  // Bitmask: 1 bit per cell (1=Stone, 0=Empty/Dot)
+  let bits = "";
+  for (let r = 0; r < grid.size; r++) {
+    for (let c = 0; c < grid.size; c++) {
+      // Stones are marked as -1
+      bits += (grid.cells[r][c] === -1 ? "1" : "0");
+    }
+  }
+  // Pad to be multiple of 5 for Base36 encoding
+  while (bits.length % 5 !== 0) bits += "0";
+
+  let bitmaskString = "";
+  for (let i = 0; i < bits.length; i += 5) {
+    const chunk = bits.substring(i, i + 5);
+    bitmaskString += parseInt(chunk, 2).toString(36);
+  }
+
+  levelCodeInput.value = code + "-" + bitmaskString;
 }
 
 function loadLevelCode() {
-  const code = levelCodeInput.value.trim();
-  if (!code) return;
+  const fullCode = levelCodeInput.value.trim();
+  if (!fullCode) return;
+
+  const [code, bitmask] = fullCode.split("-");
 
   try {
     const size = fromBase36(code[0]);
@@ -761,20 +778,32 @@ function loadLevelCode() {
     // Reset Game State
     resetGameState();
     grid = new Grid(size);
-    // Mark as imported to handle "Empty" drawing rule
     grid.isImported = true;
 
     CELL_SIZE = calculateCellSize(size);
-    // Adjust dot radius for size
     const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
     DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
 
-    // Parse Paths (Chunks of 4)
-    const body = code.substring(1);
-    if (body.length % 4 !== 0) throw new Error("Invalid code length");
+    // 1. Parse Stones from bitmask if present
+    if (bitmask) {
+      let bits = "";
+      for (let char of bitmask) {
+        bits += parseInt(char, 36).toString(2).padStart(5, "0");
+      }
+      let bitIdx = 0;
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          if (bits[bitIdx] === "1") {
+            grid.cells[r][c] = -1;
+          }
+          bitIdx++;
+        }
+      }
+    }
 
-    const numPaths = body.length / 4;
-    // Re-use Generator colors (hardcoded fallback since Generator instance is transient)
+    // 2. Parse Paths (Chunks of 4)
+    const body = code.substring(1);
+    // Be robust: coords might not be a multiple of 4 if the code is truncated, but we try anyway
     const colors = [
       '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#ffa500', '#800080', '#008000', '#000080',
       '#ffc0cb', '#a52a2a', '#808080', '#ffffff', '#ffd700', '#4b0082', '#40e0d0', '#fa8072', '#ffe4e1', '#d2b48c'
@@ -782,15 +811,11 @@ function loadLevelCode() {
 
     let pathId = 1;
     for (let i = 0; i < body.length; i += 4) {
-      const r1 = fromBase36(body[i]);
-      const c1 = fromBase36(body[i + 1]);
-      const r2 = fromBase36(body[i + 2]);
-      const c2 = fromBase36(body[i + 3]);
+      if (i + 3 >= body.length) break;
+      const coords = [body[i], body[i + 1], body[i + 2], body[i + 3]].map(fromBase36);
+      if (coords.some(v => isNaN(v) || v < 0 || v >= size)) throw new Error("Invalid coordinate");
 
-      if ([r1, c1, r2, c2].some(v => isNaN(v) || v < 0 || v >= size)) throw new Error("Invalid coordinate");
-
-      // Register Path
-      // We only know endpoints. Generator usually randomizes ID. We'll sequentialize.
+      const [r1, c1, r2, c2] = coords;
       const color = colors[(pathId - 1) % colors.length];
 
       grid.cells[r1][c1] = pathId;
@@ -799,29 +824,63 @@ function loadLevelCode() {
       grid.paths.push({
         id: pathId,
         color: color,
-        points: [[r1, c1], [r2, c2]], // Only endpoints known
+        points: [[r1, c1], [r2, c2]],
         isFiller: false
       });
-
       pathId++;
     }
 
-    grid.size = size; // Ensure size is set
-    sizeDisplay.textContent = size; // Update UI
-    gridSize = size; // Sync global state
-
+    gridSize = size;
+    sizeDisplay.textContent = size;
     draw();
     renderColorLegend();
-    // Clear status or show success? Title resets to Connect The Dots!
     updateTitle(false);
 
-    // Disable Hint for imported levels (Solution unknown)
-    revealBtn.disabled = true;
-    revealBtn.textContent = "No Hint";
+    // Re-enable Hint for imported levels by calculating them on the fly
+    calculateHintsForImported();
+    revealBtn.disabled = false;
+    revealBtn.textContent = "Hint";
 
   } catch (e) {
+    console.error(e);
     alert("Invalid Level Code: " + e.message);
   }
+}
+
+function calculateHintsForImported() {
+  if (!grid || !grid.isImported) return;
+
+  grid.paths.forEach(path => {
+    const start = path.points[0];
+    const end = path.points[1];
+
+    // BFS to find a valid path through non-stone cells
+    const queue = [[start]];
+    const visited = new Set([`${start[0]},${start[1]}`]);
+
+    while (queue.length > 0) {
+      const p = queue.shift();
+      const [r, c] = p[p.length - 1];
+
+      if (r === end[0] && c === end[1]) {
+        path.points = p;
+        return;
+      }
+
+      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      for (const [nr, nc] of neighbors) {
+        if (nr < 0 || nr >= grid.size || nc < 0 || nc >= grid.size) continue;
+        if (visited.has(`${nr},${nc}`)) continue;
+
+        const val = grid.cells[nr][nc];
+        // Accessible if it's empty (0) or the target dot
+        if (val === 0 || (nr === end[0] && nc === end[1])) {
+          visited.add(`${nr},${nc}`);
+          queue.push([...p, [nr, nc]]);
+        }
+      }
+    }
+  });
 }
 
 init();
