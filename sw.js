@@ -1,5 +1,6 @@
-const CACHE_NAME = 'connect-dots-v1';
+const CACHE_NAME = 'connect-dots-v2';
 const ASSETS_TO_CACHE = [
+    './',
     './index.html',
     './src/style.css',
     './src/main.js',
@@ -25,6 +26,11 @@ self.addEventListener('fetch', (event) => {
             // Cache hit - return response
             if (response) {
                 return response;
+            }
+            // Validating if the request is for navigation (e.g. exact URL not found)
+            // Return index.html for navigation requests (SPA support)
+            if (event.request.mode === 'navigate') {
+                return caches.match('./index.html');
             }
             return fetch(event.request);
         })
