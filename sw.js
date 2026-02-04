@@ -1,4 +1,4 @@
-const CACHE_NAME = 'connect-dots-v3';
+const CACHE_NAME = 'connect-dots-v5';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -7,11 +7,13 @@ const ASSETS_TO_CACHE = [
     './src/Grid.js',
     './src/Generator.js',
     './src/Random.js',
-    './icon.png',
+    './icons/icon-192.png',
+    './icons/icon-512.png',
     './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
+    self.skipWaiting(); // Force this SW to become active immediately
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             console.log('Opened cache');
@@ -20,34 +22,44 @@ self.addEventListener('install', (event) => {
     );
 });
 
-self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request).then((response) => {
-            // Cache hit - return response
-            if (response) {
-                return response;
-            }
-            // Validating if the request is for navigation (e.g. exact URL not found)
-            // Return index.html for navigation requests (SPA support)
-            if (event.request.mode === 'navigate') {
-                return caches.match('./index.html');
-            }
-            return fetch(event.request);
-        })
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        Promise.all([
+            self.clients.claim(), // Take control of all open clients immediately
+            caches.keys().then((cacheNames) => {
+                return Promise.all(
+                    cacheNames.map((cacheName) => {
+                        if (cacheName !== CACHE_NAME) {
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            })
+        ])
     );
 });
 
-self.addEventListener('activate', (event) => {
-    const cacheWhitelist = [CACHE_NAME];
-    event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cacheName) => {
-                    if (cacheWhitelist.indexOf(cacheName) === -1) {
-                        return caches.delete(cacheName);
+self.addEventListener('fetch', (event) => {
+    event.respondWith(
+        fetch(event.request)
+            .then((networkResponse) => {
+                // If network fetch succeeds, update the cache and return
+                return caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, networkResponse.clone());
+                    return networkResponse;
+                });
+            })
+            .catch(() => {
+                // If network fails (offline), return from cache
+                return caches.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) {
+                        return cachedResponse;
                     }
-                })
-            );
-        })
+                    // Fallback for navigation (offline SPA support)
+                    if (event.request.mode === 'navigate') {
+                        return caches.match('./index.html');
+                    }
+                });
+            })
     );
 });
