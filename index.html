@@ -23,16 +23,37 @@
     <main>
       <div class="controls">
         <div class="grid-size-control">
-          <label>Grid:</label>
           <button id="size-decrease" class="size-btn">−</button>
           <span id="grid-size-display">5</span>
           <button id="size-increase" class="size-btn">+</button>
         </div>
-        <button id="generate-btn">New</button>
-        <div class="hard-mode-control">
-          <input type="checkbox" id="hard-mode-cb">
-          <label for="hard-mode-cb">Hard</label>
-        </div>
+        <button id="generate-btn" title="New Puzzle">
+          <svg viewBox="0 0 24 24" width="22" height="22">
+            <path fill="currentColor" d="M7,2V11H10V22L17,10H13L17,2H7Z" />
+          </svg>
+        </button>
+        <button id="hard-mode-btn" title="Hard Mode">
+          <svg viewBox="0 0 24 24" width="28" height="28">
+            <!-- Happy Face (Normal Mode) -->
+            <path class="icon-happy" fill="currentColor"
+              d="M12,2C6.47,2 2,6.47 2,12C2,17.53 6.47,22 12,22A10,10 0 0,0 22,12C22,6.47 17.5,2 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M13,9.94L14.06,11L15.12,9.94L16.18,11L17.24,9.94L15.12,7.82L13,9.94M8.88,9.94L9.94,11L11,9.94L8.88,7.82L6.76,9.94L7.82,11L8.88,9.94M12,17.5C14.33,17.5 16.31,16.04 17.11,14H6.89C7.69,16.04 9.67,17.5 12,17.5Z" />
+            <!-- Angry Face (Hard Mode) -->
+            <path class="icon-angry" fill="currentColor"
+              d="M20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12M22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2A10,10 0 0,1 22,12M15.5,8C16.3,8 17,8.7 17,9.5C17,10.3 16.3,11 15.5,11C14.7,11 14,10.3 14,9.5C14,8.7 14.7,8 15.5,8M10,9.5C10,10.3 9.3,11 8.5,11C7.7,11 7,10.3 7,9.5C7,8.7 7.7,8 8.5,8C9.3,8 10,8.7 10,9.5M12,14C13.75,14 15.29,14.85 16.19,16.13L14.65,17.18C14.12,16.47 13.14,15.95 12,15.95C10.86,15.95 9.88,16.47 9.35,17.18L7.81,16.13C8.71,14.85 10.25,14 12,14Z" />
+          </svg>
+        </button>
+        <button id="undo-btn" title="Undo">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor"
+              d="M12.5,8C9.85,8 7.45,9 5.6,10.6L2,7V16H11L7.38,12.38C8.77,11.22 10.54,10.5 12.5,10.5C16.04,10.5 19.05,12.81 20.1,16L22.47,15.22C21.08,11.03 17.15,8 12.5,8Z" />
+          </svg>
+        </button>
+        <button id="redo-btn" title="Redo">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor"
+              d="M18.4,10.6C16.55,9 14.15,8 11.5,8C6.85,8 2.92,11.03 1.53,15.22L3.9,16C4.95,12.81 7.96,10.5 11.5,10.5C13.46,10.5 15.23,11.22 16.62,12.38L13,16H22V7L18.4,10.6Z" />
+          </svg>
+        </button>
         <button id="reset-btn" title="Start Over">
           <svg viewBox="0 0 24 24" width="20" height="20">
             <path fill="currentColor"
@@ -51,13 +72,14 @@
         <canvas id="game-canvas"></canvas>
       </div>
 
-
-      <!-- Level Code Section -->
-      <div class="level-code-container">
-        <input type="text" id="level-code-input" placeholder="Paste Level Code Here..." />
-        <button id="load-code-btn">Load</button>
-        <button id="copy-code-btn">Copy</button>
+      <div class="bottom-controls">
+        <div class="seed-control">
+          <label for="seed-input">Seed:</label>
+          <input type="text" id="seed-input" placeholder="Random" />
+        </div>
       </div>
+
+
 
       <!-- <div id="color-legend"></div> -->
     </main>
@@ -96,7 +118,7 @@
       </div>
     </div>
   </div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="./src/main.js"></script>
 </body>
 
 </html>

@@ -1,5 +1,6 @@
 import { Grid } from './Grid.js';
 import { Generator } from './Generator.js';
+import { Random } from './Random.js';
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
@@ -8,13 +9,11 @@ const revealBtn = document.getElementById('reveal-btn');
 const sizeDisplay = document.getElementById('grid-size-display');
 const sizeDecreaseBtn = document.getElementById('size-decrease');
 const sizeIncreaseBtn = document.getElementById('size-increase');
-const hardModeCb = document.getElementById('hard-mode-cb');
+const hardModeBtn = document.getElementById('hard-mode-btn');
 const resetBtn = document.getElementById('reset-btn');
-
-// Level Code UI
-const levelCodeInput = document.getElementById('level-code-input');
-const loadCodeBtn = document.getElementById('load-code-btn');
-const copyCodeBtn = document.getElementById('copy-code-btn');
+const undoBtn = document.getElementById('undo-btn');
+const redoBtn = document.getElementById('redo-btn');
+const seedInput = document.getElementById('seed-input');
 
 // Settings UI
 const settingsModal = document.getElementById('settings-modal');
@@ -71,6 +70,10 @@ let userPaths = {}; // { pathId: [[r,c], [r,c], ...] }
 let isDrawing = false;
 let activePathId = null;
 let lastCell = null; // [r, c] last cell user touched
+let undoStack = [];
+let redoStack = [];
+let prevUserPaths = null;
+let loadedSeed = null; // Track the seed of the active grid
 
 // Rendering constants
 const DEFAULT_CELL_SIZE = 50;
@@ -131,7 +134,45 @@ function calculateCellSize(gridSize) {
 }
 
 function init() {
-  generateBtn.addEventListener('click', generate);
+  generateBtn.addEventListener('click', () => {
+    // If user has not changed the seed input manually, randomize it.
+    // This allows "New" to truly feel like a new level every time.
+    if (seedInput.value === loadedSeed) {
+      seedInput.value = '';
+    }
+    generate();
+  });
+
+  const updateSeedFromUI = () => {
+    const seed = seedInput.value.trim();
+    const match = seed.match(/^(\d+)([HS])(.+)$/);
+    if (match) {
+      const rawSeed = match[3];
+      const isHard = hardModeBtn.classList.contains('active');
+      const modeChar = isHard ? 'H' : 'S';
+      seedInput.value = `${gridSize}${modeChar}${rawSeed}`;
+    }
+  };
+
+  seedInput.addEventListener('input', () => {
+    const seed = seedInput.value.trim();
+    const match = seed.match(/^(\d+)([HS])(.+)$/);
+    if (match) {
+      const size = parseInt(match[1]);
+      const hard = (match[2] === 'H');
+      if (size >= 5 && size <= 20) {
+        gridSize = size;
+        sizeDisplay.textContent = size;
+        if (hard) hardModeBtn.classList.add('active');
+        else hardModeBtn.classList.remove('active');
+      }
+    }
+  });
+
+  hardModeBtn.addEventListener('click', () => {
+    hardModeBtn.classList.toggle('active');
+    updateSeedFromUI();
+  });
 
   // Hint button: press and hold to show
   const showHint = (e) => {
@@ -159,6 +200,7 @@ function init() {
     if (gridSize > 5) {
       gridSize--;
       sizeDisplay.textContent = gridSize;
+      updateSeedFromUI();
     }
   });
 
@@ -166,24 +208,38 @@ function init() {
     if (gridSize < 20) {
       gridSize++;
       sizeDisplay.textContent = gridSize;
+      updateSeedFromUI();
     }
   });
 
   resetBtn.addEventListener('click', () => {
     userPaths = {};
+    undoStack = [];
+    redoStack = [];
+    updateUndoRedoButtons();
     draw();
   });
 
-
-  loadCodeBtn.addEventListener('click', loadLevelCode);
-  copyCodeBtn.addEventListener('click', () => {
-    levelCodeInput.select();
-    navigator.clipboard.writeText(levelCodeInput.value).then(() => {
-      const originalText = copyCodeBtn.textContent;
-      copyCodeBtn.textContent = 'Copied!';
-      setTimeout(() => copyCodeBtn.textContent = originalText, 1500);
-    });
+  undoBtn.addEventListener('click', () => {
+    if (undoStack.length > 0) {
+      redoStack.push(JSON.stringify(userPaths));
+      userPaths = JSON.parse(undoStack.pop());
+      updateUndoRedoButtons();
+      draw();
+      checkWin();
+    }
   });
+
+  redoBtn.addEventListener('click', () => {
+    if (redoStack.length > 0) {
+      undoStack.push(JSON.stringify(userPaths));
+      userPaths = JSON.parse(redoStack.pop());
+      updateUndoRedoButtons();
+      draw();
+      checkWin();
+    }
+  });
+
 
   // Settings Events
   settingsOpenBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
@@ -206,31 +262,30 @@ function init() {
   sizeDisplay.textContent = gridSize;
 
   // Mouse Events
-  canvas.addEventListener('mousedown', handlePointerDown);
+  canvas.addEventListener('mousedown', (e) => {
+    redoStack = [];
+    prevUserPaths = JSON.stringify(userPaths);
+    handlePointerDown(e);
+    updateUndoRedoButtons();
+  });
   window.addEventListener('mousemove', handlePointerMove);
   window.addEventListener('mouseup', handlePointerUp);
 
   // Mobile Touch Events
-  // Mobile Touch Events
   const onTouchStart = (e) => {
+    redoStack = [];
+    prevUserPaths = JSON.stringify(userPaths);
     if (e.touches.length > 1) {
       if (isDrawing) {
         isDrawing = false;
         activePathId = null;
         draw();
       }
-      return; // Never preventDefault on multi-touch
+      return;
     }
-
-    // Single touch
     const touch = e.touches[0];
     const started = handlePointerDown(touch);
-
-    // ONLY preventDefault if we actually hit a dot and started drawing.
-    // This is crucial: it lets the browser handle scroll/zoom if we touch empty space.
-    if (started) {
-      if (e.cancelable) e.preventDefault();
-    }
+    if (started && e.cancelable) e.preventDefault();
   };
 
   const onTouchMove = (e) => {
@@ -242,7 +297,6 @@ function init() {
       }
       return;
     }
-
     if (isDrawing) {
       if (e.cancelable) e.preventDefault();
       const touch = e.touches[0];
@@ -255,8 +309,6 @@ function init() {
   window.addEventListener('touchend', handlePointerUp);
   window.addEventListener('touchcancel', handlePointerUp);
 
-
-
   // Populate build info
   const buildInfoEl = document.getElementById('build-info');
   if (buildInfoEl) {
@@ -266,8 +318,14 @@ function init() {
 
   // Initial generation
   generate();
-  // Ensure title is correct initially
   updateTitle(false);
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons() {
+  if (!undoBtn || !redoBtn) return;
+  undoBtn.disabled = undoStack.length === 0;
+  redoBtn.disabled = redoStack.length === 0;
 }
 
 function updateTitle(isWin) {
@@ -438,10 +496,17 @@ function handlePointerUp() {
         // Remove unfinished path
         delete userPaths[activePathId];
         draw();
+      } else {
+        // Successfully connected! Save to history
+        if (prevUserPaths) {
+          undoStack.push(prevUserPaths);
+          updateUndoRedoButtons();
+        }
       }
     }
     checkWin();
   }
+  prevUserPaths = null;
   isDrawing = false;
   activePathId = null;
   lastCell = null;
@@ -478,7 +543,6 @@ function checkWin() {
   if (allConnected) {
     console.log("ALL PATHS CONNECTED!");
     updateTitle(true);
-    exportLevelCode();
     playApplause();
   }
 }
@@ -487,6 +551,9 @@ function checkWin() {
 function resetGameState() {
   showPaths = false;
   userPaths = {};
+  undoStack = [];
+  redoStack = [];
+  updateUndoRedoButtons();
   isDrawing = false;
   activePathId = null;
   lastCell = null;
@@ -501,39 +568,59 @@ function resetGameState() {
 }
 
 function generate() {
-  const size = gridSize;
+  let seed = seedInput.value.trim();
+  let size = gridSize;
+  let hardMode = hardModeBtn.classList.contains('active');
+
+  // Pattern: [Size][Mode][RandomPart] (e.g., 10HB7AQ66)
+  const match = seed.match(/^(\d+)([HS])(.+)$/);
+  if (match) {
+    size = parseInt(match[1]);
+    hardMode = (match[2] === 'H');
+    seed = match[3];
+
+    // Update UI to match seed settings
+    gridSize = size;
+    sizeDisplay.textContent = size;
+    if (hardMode) hardModeBtn.classList.add('active');
+    else hardModeBtn.classList.remove('active');
+  }
+
+  // If input was empty or didn't have prefix, we use current UI settings
+  if (!seed) {
+    seed = Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+
+  // Unified seed for display/sharing
+  const modeChar = hardMode ? 'H' : 'S';
+  const displaySeed = `${size}${modeChar}${seed}`;
+  seedInput.value = displaySeed;
 
   // Reset state and switch to a fresh empty grid immediately
   resetGameState();
   grid = new Grid(size);
 
+  const random = new Random(seed);
+
   // Recalculate dynamic sizing for mobile
   CELL_SIZE = calculateCellSize(size);
 
-  // Make dot size relative to grid size (smaller ratio for smaller grids to avoid "clunky" look)
-  // 5x5 -> 0.28, 20x20 -> 0.38
+  // Make dot size relative to grid size
   const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
   DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
 
   generateBtn.disabled = true;
-  generateBtn.disabled = true;
-
-
 
   // Allow UI to update
   setTimeout(() => {
     try {
-      const t0 = performance.now();
-      const generator = new Generator(grid, { hardMode: hardModeCb.checked });
+      const generator = new Generator(grid, {
+        hardMode: hardMode,
+        random: random
+      });
 
-      let success = false;
       if (generator.generate()) {
-        success = true;
-      }
-
-      const t1 = performance.now();
-
-      if (success) {
+        loadedSeed = displaySeed; // Track the full display seed
         // Explicitly mark stones in generated grid as -1
         for (let r = 0; r < grid.size; r++) {
           for (let c = 0; c < grid.size; c++) {
@@ -541,8 +628,6 @@ function generate() {
           }
         }
         draw();
-        renderColorLegend();
-        exportLevelCode();
       } else {
         console.error("Failed to generate valid board. Try again.");
       }
@@ -801,181 +886,5 @@ function drawDot(r, c, color, pathId) {
   // Draw the text (nudged down slightly by 10% of radius for better visual centering)
   ctx.fillText(pathId.toString(), x, y + (DOT_RADIUS * 0.1));
 }
-
-function renderColorLegend() {
-  const legendEl = document.getElementById('color-legend');
-  if (!grid || !legendEl) return;
-
-  legendEl.innerHTML = '<h3>Path Colors</h3>';
-
-  const legendContainer = document.createElement('div');
-  legendContainer.style.display = 'flex';
-  legendContainer.style.flexWrap = 'wrap';
-  legendContainer.style.gap = '10px';
-  legendContainer.style.marginTop = '10px';
-
-  grid.paths.forEach(path => {
-    const item = document.createElement('div');
-    item.style.display = 'flex';
-    item.style.alignItems = 'center';
-    item.style.gap = '8px';
-    item.style.padding = '5px 10px';
-    item.style.backgroundColor = '#333';
-    item.style.borderRadius = '4px';
-
-    const swatch = document.createElement('div');
-    swatch.style.width = '24px';
-    swatch.style.height = '24px';
-    swatch.style.backgroundColor = path.color;
-    swatch.style.borderRadius = '50%';
-    swatch.style.border = '2px solid #555';
-
-    const label = document.createElement('span');
-    label.style.color = '#fff';
-    label.style.fontSize = '12px';
-    label.textContent = path.color;
-
-    item.appendChild(swatch);
-    item.appendChild(label);
-    legendContainer.appendChild(item);
-  });
-
-  legendEl.appendChild(legendContainer);
-}
-
-// ------------------------------------
-// Level Code Logic (Base36)
-// ------------------------------------
-
-function toBase36(n) {
-  return n.toString(36);
-}
-
-function fromBase36(char) {
-  return parseInt(char, 36);
-}
-
-function exportLevelCode() {
-  if (!grid) return;
-  // Code Format: [Size][Coords]-[StoneBitmask]
-  let code = toBase36(grid.size);
-
-  grid.paths.forEach(p => {
-    const start = p.points[0];
-    const end = p.points[p.points.length - 1];
-    code += toBase36(start[0]) + toBase36(start[1]) + toBase36(end[0]) + toBase36(end[1]);
-  });
-
-  // Bitmask: 1 bit per cell (1=Stone, 0=Empty/Dot)
-  let bits = "";
-  for (let r = 0; r < grid.size; r++) {
-    for (let c = 0; c < grid.size; c++) {
-      // Stones are marked as -1
-      bits += (grid.cells[r][c] === -1 ? "1" : "0");
-    }
-  }
-  // Pad to be multiple of 5 for Base36 encoding
-  while (bits.length % 5 !== 0) bits += "0";
-
-  let bitmaskString = "";
-  for (let i = 0; i < bits.length; i += 5) {
-    const chunk = bits.substring(i, i + 5);
-    bitmaskString += parseInt(chunk, 2).toString(36);
-  }
-
-  levelCodeInput.value = code + "-" + bitmaskString;
-}
-
-function loadLevelCode() {
-  const fullCode = levelCodeInput.value.trim();
-  if (!fullCode) return;
-
-  const [code, bitmask] = fullCode.split("-");
-
-  try {
-    const size = fromBase36(code[0]);
-    if (isNaN(size) || size < 5 || size > 20) throw new Error("Invalid grid size");
-
-    // Reset Game State
-    resetGameState();
-    grid = new Grid(size);
-    grid.isImported = true;
-
-    CELL_SIZE = calculateCellSize(size);
-    const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
-    DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
-
-    // 1. Parse Stones from bitmask if present
-    if (bitmask) {
-      let bits = "";
-      for (let char of bitmask) {
-        bits += parseInt(char, 36).toString(2).padStart(5, "0");
-      }
-      let bitIdx = 0;
-      for (let r = 0; r < size; r++) {
-        for (let c = 0; c < size; c++) {
-          if (bits[bitIdx] === "1") {
-            grid.cells[r][c] = -1;
-          }
-          bitIdx++;
-        }
-      }
-    }
-
-    // 2. Parse Paths (Chunks of 4)
-    const body = code.substring(1);
-    // Be robust: coords might not be a multiple of 4 if the code is truncated, but we try anyway
-    const colors = [
-      '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#ffa500', '#800080', '#008000', '#000080',
-      '#ffc0cb', '#a52a2a', '#808080', '#ffffff', '#ffd700', '#4b0082', '#40e0d0', '#fa8072', '#ffe4e1', '#d2b48c'
-    ];
-
-    let pathId = 1;
-    for (let i = 0; i < body.length; i += 4) {
-      if (i + 3 >= body.length) break;
-      const coords = [body[i], body[i + 1], body[i + 2], body[i + 3]].map(fromBase36);
-      if (coords.some(v => isNaN(v) || v < 0 || v >= size)) throw new Error("Invalid coordinate");
-
-      const [r1, c1, r2, c2] = coords;
-      const color = colors[(pathId - 1) % colors.length];
-
-      grid.cells[r1][c1] = pathId;
-      grid.cells[r2][c2] = pathId;
-
-      grid.paths.push({
-        id: pathId,
-        color: color,
-        points: [[r1, c1], [r2, c2]],
-        isFiller: false
-      });
-      pathId++;
-    }
-
-    gridSize = size;
-    sizeDisplay.textContent = size;
-
-    // Must call draw() to properly resize canvas before other UI updates
-    draw();
-    renderColorLegend();
-    updateTitle(false);
-
-    // Disable Hint for imported levels as their full paths are unknown
-    revealBtn.classList.add('no-hint');
-    revealBtn.innerHTML = `
-      <svg id="hint-icon" viewBox="0 0 24 24" width="22" height="22">
-        <path fill="currentColor" d="M11.83,9L15,12.16C15,12.11 15,12.05 15,12A3,3 0 0,0 12,9C11.94,9 11.89,9 11.83,9M7.53,9.8L9.08,11.35C9.03,11.56 9,11.77 9,12A3,3 0 0,0 12,15C12.22,15 12.44,14.97 12.65,14.92L14.2,16.47C13.53,16.8 12.79,17 12,17A5,5 0 0,1 7,12C7,11.21 7.2,10.47 7.53,9.8M2,4.27L4.28,6.55L4.73,7C3.08,8.3 1.78,10 1,12C2.73,16.39 7,19.5 12,19.5C13.55,19.5 15.03,19.2 16.38,18.66L16.81,19.08L19.73,22L21,20.73L3.27,3M12,7A5,5 0 0,1 17,12C17,12.64 16.87,13.26 16.64,13.82L19.57,16.75C21.07,15.5 22.27,13.86 23,12C21.27,7.61 17,4.5 12,4.5C10.6,4.5 9.26,4.75 8,5.2L10.17,7.35C10.74,7.13 11.35,7 12,7Z" />
-      </svg>
-    `;
-    revealBtn.disabled = true;
-
-    // Force a redraw after a short delay to ensure canvas is properly sized
-    setTimeout(() => draw(), 10);
-
-  } catch (e) {
-    console.error(e);
-    alert("Invalid Level Code: " + e.message);
-  }
-}
-
 
 init();

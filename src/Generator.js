@@ -4,6 +4,7 @@ export class Generator {
     constructor(grid, options = {}) {
         this.grid = grid;
         this.hardMode = options.hardMode || false;
+        this.random = options.random;
     }
 
     generate() {
@@ -145,7 +146,7 @@ export class Generator {
         if (empties.length < 2) return false;
 
         // random A
-        const idxA = Math.floor(Math.random() * empties.length);
+        const idxA = this.random.range(0, empties.length);
         const start = empties[idxA];
 
         // Remove A from list to pick B
@@ -194,7 +195,7 @@ export class Generator {
 
         if (candidateList.length === 0) return false;
 
-        const idxB = Math.floor(Math.random() * candidateList.length);
+        const idxB = this.random.range(0, candidateList.length);
         const end = candidateList[idxB];
 
         // 2. Find Shortest Path (BFS)
@@ -402,7 +403,7 @@ export class Generator {
         if (paths.length === 0) return;
 
         // 1. Shuffle the paths array
-        this.shuffle(paths);
+        this.random.shuffle(paths);
 
         // 2. Re-assign IDs and update grid matrix
         // Reset matrix first
@@ -435,7 +436,7 @@ export class Generator {
             changed = false;
             iterations++;
             // Shuffle to vary the order of processing paths
-            this.shuffle(this.grid.paths);
+            this.random.shuffle(this.grid.paths);
 
             for (const path of this.grid.paths) {
                 // Try expanding Start
@@ -463,15 +464,6 @@ export class Generator {
         let prevSegmentLength = 0;
 
         if (path.points.length > 1) {
-            // If tip is at 0 (Start), the path goes 0 -> 1.
-            // So the "arriving" direction to tip was (0 - 1).
-            // Wait, usually direction is "forward".
-            // If we extend 0, we are moving AWAY from 1.
-            // Direction = (0 - 1).
-
-            // If tip is at End (N), path goes N-1 -> N.
-            // Direction = (N - (N-1)).
-
             const [pr, pc] = isStart ? path.points[1] : path.points[path.points.length - 2];
             prevDir = [r - pr, c - pc];
 
@@ -486,7 +478,7 @@ export class Generator {
 
         // 2. Random Selection Loop
         // "if the first selected is not valid... try other options"
-        this.shuffle(neighbors);
+        this.random.shuffle(neighbors);
 
         for (const [nr, nc] of neighbors) {
             // Check Constraint 1: Don't touch other endpoint
@@ -502,50 +494,35 @@ export class Generator {
             }
 
             // Check Constraint 2: No U-Shaped Turns
-            // A U-shape is when you turn 90°, go 1 step, then turn 90° back toward where you came from.
-            // Example: East → South (1 step) → West creates a U-shape
-            // We need to look at the direction BEFORE the previous segment to detect this.
             if (prevDir && prevSegmentLength < 2 && path.points.length >= 3) {
                 const newDir = [nr - r, nc - c];
 
-                // Get the direction from 2 segments ago
-                // If we're at the start (index 0), look at points[2] -> points[1]
-                // If we're at the end, look at points[N-3] -> points[N-2]
                 let dirBeforePrev = null;
                 if (isStart && path.points.length >= 3) {
-                    const p0 = path.points[0];  // current tip
-                    const p1 = path.points[1];  // 1 back
-                    const p2 = path.points[2];  // 2 back
+                    const p1 = path.points[1];
+                    const p2 = path.points[2];
                     dirBeforePrev = [p1[0] - p2[0], p1[1] - p2[1]];
                 } else if (!isStart && path.points.length >= 3) {
-                    const pN = path.points[path.points.length - 1];  // current tip
-                    const pN1 = path.points[path.points.length - 2]; // 1 back
-                    const pN2 = path.points[path.points.length - 3]; // 2 back
+                    const pN1 = path.points[path.points.length - 2];
+                    const pN2 = path.points[path.points.length - 3];
                     dirBeforePrev = [pN1[0] - pN2[0], pN1[1] - pN2[1]];
                 }
 
-                // If the new direction is OPPOSITE to the direction from 2 segments ago, it's a U-shape
                 if (dirBeforePrev) {
                     const isUShape = (newDir[0] === -dirBeforePrev[0] && newDir[1] === -dirBeforePrev[1]);
 
                     if (isUShape) {
-                        // console.log(`[SKIP-U] Color: ${path.color} blocked U-shape`);
                         continue;
                     }
                 }
             }
 
-            // Check Constraint 3: Self-Touch (Don't touch any other part of the same path)
-            // The candidate (nr, nc) is adjacent to the current tip (r, c).
-            // We check if it is adjacent to ANY OTHER cell of the same path.
-            // Simplest way: Count neighbors of (nr, nc) that have value === path.id
-            // If count > 1, it means it touches the tip AND someone else.
+            // Check Constraint 3: Self-Touch
             const samePathNeighbors = this.getNeighbors(nr, nc).filter(([tr, tc]) => {
                 return this.grid.cells[tr][tc] === path.id;
             });
 
             if (samePathNeighbors.length > 1) {
-                // console.log(`[SKIP-TOUCH] Color: ${path.color} touching self`);
                 continue;
             }
 
@@ -565,12 +542,6 @@ export class Generator {
                 path.pointTypes.push(type);
             }
 
-            // Debug logging for extensions
-            const dirMap = { '0,1': 'East', '0,-1': 'West', '1,0': 'South', '-1,0': 'North' };
-            const direction = dirMap[`${currR - r},${currC - c}`] || 'Unknown';
-            const emptyNeighbors = this.getNeighbors(currR, currC).filter(([tnr, tnc]) => this.grid.isEmpty(tnr, tnc)).length;
-            // console.log(`[EXTENSION] Color: ${path.color}, Old End: (${r},${c}), New End: (${currR},${currC}), Direction: ${direction}, Empty Neighbors: ${emptyNeighbors}`);
-
             return true; // Made a move, exit
         }
 
@@ -583,13 +554,9 @@ export class Generator {
         let count = 0;
 
         if (isStart) {
-            // Tip is at 0. Direction tipDir is vector pointing 1->0 (e.g. Up).
-            // We scan 0->1, 1->2, ...
-            // Segment 0->1 must match tipDir.
             for (let i = 0; i < path.points.length - 1; i++) {
                 const curr = path.points[i];
                 const next = path.points[i + 1];
-                // Vector from next to curr: curr - next
                 if (curr[0] - next[0] === tipDir[0] && curr[1] - next[1] === tipDir[1]) {
                     count++;
                 } else {
@@ -597,12 +564,9 @@ export class Generator {
                 }
             }
         } else {
-            // Tip is at End. Direction tipDir is vector pointing N-1 -> N.
-            // We scan N->N-1, N-1->N-2...
             for (let i = path.points.length - 1; i > 0; i--) {
                 const curr = path.points[i];
                 const prev = path.points[i - 1];
-                // Vector from prev to curr: curr - prev
                 if (curr[0] - prev[0] === tipDir[0] && curr[1] - prev[1] === tipDir[1]) {
                     count++;
                 } else {
@@ -618,8 +582,6 @@ export class Generator {
     }
 
     getDistinctColor(index) {
-        // Use golden ratio (137.5 degrees) for maximum color distinction
-        // This ensures every path gets a unique, maximally separated color
         const hue = ((index - 1) * 137.5) % 360;
         return `hsl(${hue}, 85%, 60%)`;
     }
@@ -648,16 +610,6 @@ export class Generator {
         const [startR, startC] = start;
         const [endR, endC] = end;
 
-        const queue = [[startR, startC, []]]; // r, c, history
-        const visited = new Set();
-        visited.add(`${startR},${startC}`);
-
-        // Optimization: BFS for shortest path
-        // We need to store the path.
-
-        // Queue: [ [r, c] ]
-        // Map parent pointers to reconstruct path: parent[key] = prevKey
-
         const q = [start];
         const parents = new Map();
         parents.set(`${startR},${startC}`, null);
@@ -679,9 +631,6 @@ export class Generator {
                 const key = `${nr},${nc}`;
 
                 if (!parents.has(key)) {
-                    // Valid if: 
-                    // 1. Inside grid
-                    // 2. Empty OR it is the End cell
                     if (this.grid.isValid(nr, nc)) {
                         if (this.grid.cells[nr][nc] === 0 || (nr === endR && nc === endC)) {
                             parents.set(key, [r, c]);
@@ -694,7 +643,6 @@ export class Generator {
 
         if (!found) return null;
 
-        // Reconstruct
         const path = [];
         let curr = end;
         while (curr) {
@@ -715,12 +663,5 @@ export class Generator {
             }
         }
         return res;
-    }
-
-    shuffle(array) {
-        for (let i = array.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
-        }
     }
 }

@@ -208,8 +208,8 @@ header h1 {
 }
 
 .size-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   font-size: 1.5em;
   padding: 0;
   display: flex;
@@ -224,6 +224,28 @@ header h1 {
   text-align: center;
 }
 
+.seed-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#seed-input {
+  background: #333;
+  border: 1px solid #555;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 4px;
+  width: 120px;
+  font-size: 0.9em;
+  font-family: monospace;
+}
+
+#seed-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -234,11 +256,21 @@ button {
   background-color: var(--accent-color);
   color: white;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: border-color 0.25s, background-color 0.25s;
 }
 
+#generate-btn,
+/* Orange */
+#hard-mode-btn,
+/* Gray -> Red */
+#undo-btn,
+/* Blue */
+#redo-btn,
+/* Blue */
 #reset-btn,
+/* Blue */
 #reveal-btn {
+  /* Blue */
   width: 40px;
   height: 40px;
   min-width: unset;
@@ -248,22 +280,64 @@ button {
   justify-content: center;
 }
 
+#generate-btn {
+  background-color: #ff9f1c;
+  /* Vibrant orange for Thunderbolt */
+}
+
+#generate-btn:hover {
+  background-color: #ffb142;
+}
+
 #reveal-btn.no-hint svg {
   color: #ff4444;
 }
 
-.hard-mode-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.9em;
-  cursor: pointer;
-  white-space: nowrap;
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(1);
 }
 
-#hard-mode-cb {
-  cursor: pointer;
-  margin: 0;
+#hard-mode-btn {
+  /* Inherit standard button styles (blue accent) initially? 
+     No, user screenshot showed Gray. But user wants "look same".
+     Making it blue makes it consistent with Undo/Redo/Reset. 
+     Let's keep it consistent: Blue by default, Red when active. */
+  background-color: var(--accent-color);
+  color: white;
+}
+
+#hard-mode-btn:hover {
+  background-color: #666;
+  color: #fff;
+}
+
+#hard-mode-btn.active {
+  background-color: #ff4444;
+  /* Red for devil/hard mode */
+  color: white;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+#hard-mode-btn.active:hover {
+  background-color: #ff6666;
+}
+
+/* Icon Toggling Logic */
+#hard-mode-btn .icon-angry {
+  display: none;
+  /* Hidden by default */
+}
+
+#hard-mode-btn.active .icon-happy {
+  display: none;
+  /* Hide happy when active */
+}
+
+#hard-mode-btn.active .icon-angry {
+  display: block;
+  /* Show angry when active */
 }
 
 button:hover {
@@ -289,47 +363,14 @@ canvas {
   /* Prevent scrollbars from stealing gestures */
 }
 
-#color-legend {
-  margin-top: 20px;
-  padding: 15px;
-  background: var(--panel-bg);
-  border-radius: 8px;
-  text-align: left;
-}
-
-#color-legend h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-  font-size: 1.1em;
-  color: #ccc;
-}
-
-/* Level Code UI */
-.level-code-container {
-  margin-top: 15px;
+.bottom-controls {
   display: flex;
   justify-content: center;
-  gap: 10px;
-  background: var(--panel-bg);
-  padding: 10px;
-  border-radius: 8px;
+  align-items: center;
+  margin-top: 15px;
+  width: 100%;
 }
 
-#level-code-input {
-  background: #333;
-  border: 1px solid #555;
-  color: #fff;
-  padding: 8px 12px;
-  border-radius: 4px;
-  width: 250px;
-  font-family: monospace;
-  font-size: 1em;
-}
-
-#level-code-input:focus {
-  outline: none;
-  border-color: var(--accent-color);
-}
 
 footer {
   margin-top: 30px;
@@ -357,48 +398,46 @@ footer p {
     display: none;
   }
 
+  .grid-size-control {
+    gap: 2px;
+    /* Restore small gap */
+  }
+
   .controls {
-    gap: 4px;
+    gap: 2px;
+    /* Restore small gap */
     padding: 5px;
     justify-content: center;
     flex-wrap: nowrap;
   }
 
-  button {
-    padding: 0.3em 0.4em;
-    font-size: 0.75em;
-    white-space: nowrap;
-    height: 32px;
-  }
-
+  /* Unify all icon buttons on mobile */
+  .controls button,
+  .size-btn,
+  #hard-mode-btn,
   #reset-btn,
-  #reveal-btn {
-    width: 32px;
-    height: 32px;
-  }
-
-  #reset-btn svg,
-  #reveal-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .hard-mode-control {
-    font-size: 0.75em;
-    gap: 2px;
-    margin: 0 2px;
-  }
-
-  .grid-size-control {
-    gap: 2px;
-  }
-
-  .size-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 1.1em;
+  #reveal-btn,
+  #generate-btn,
+  #undo-btn,
+  #redo-btn {
+    width: 36px;
+    height: 36px;
     padding: 0;
-    line-height: 1;
+    font-size: 1.25em;
+    border-radius: 4px;
+    /* Restore rounded corners */
+    margin: 0;
+  }
+
+  /* Specific SVG adjustments if needed */
+  #reset-btn svg,
+  #reveal-btn svg,
+  #undo-btn svg,
+  #redo-btn svg,
+  #hard-mode-btn svg,
+  #generate-btn svg {
+    width: 20px;
+    height: 20px;
   }
 
 
