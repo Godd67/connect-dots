@@ -2,7 +2,7 @@
     "id": "me.oleggus.connectdots",
     "name": "Connect The Dots",
     "short_name": "GO Dots",
-    "start_url": "./index.html?source=pwa",
+    "start_url": "/",
     "scope": "./",
     "display": "standalone",
     "background_color": "#1a1a1a",
