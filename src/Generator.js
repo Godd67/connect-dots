@@ -19,31 +19,32 @@ export class Generator {
 
                 // Phase 3: Prune "dumb" geometric loops (optimization)
                 // This is the FINAL step to ensure no artifacts remain.
-                this.tightenPaths();
+                //this.tightenPaths();
 
-                // Phase 4: Re-Expand Random
-                // Re-filling voids created by tightening. 
-                // THESE are the "extensions" user wants to see distinguished.
-                this.expandPathsRandom(true);
-
-                // Phase 5: Fill residual bundles (user request)
+                // Phase 4: Fill residual bundles EARLY (user request)
+                // Move this UP so we prioritize filling voids with NEW short paths
+                // rather than forcing existing paths to wind around.
                 this.fillSmallVoids();
 
-                // Phase 5.5: Expand Fillers
-                // Allow the newly added filler paths (and existing ones) to grow into remaining space
-                this.expandPathsRandom(true);
+                // Phase 5: Re-Expand Random
+                // Re-filling voids created by tightening. 
+                // THESE are the "extensions" user wants to see distinguished.
+                //this.expandPathsRandom(true);
 
-                // Phase 5.6: Final Pruning (User Request)
+                // Phase 5.5: Final Pruning (User Request)
                 // Prune any sub-optimal loops formed during expansion/filling phases
-                this.tightenPaths();
+                //this.tightenPaths();
 
-                // Phase 5.7: Final Polish Expansion
+                // Phase 5.6: Final Polish Expansion
                 // Last ditch effort to fill any holes created by final tightening
-                this.expandPathsRandom(true);
+                //this.expandPathsRandom(true);
+
+                // Phase 5.7: Tighten ONCE MORE to catch spirals from the last expansion
+                //this.tightenPaths();
 
                 // Phase 5.75: Final Clump Cleanup (User Request)
                 // One last check to catch any 3+ clumps that appeared after tightening
-                this.fillSmallVoids();
+                //this.fillSmallVoids();
 
                 // Phase 5.8: Merge Collinear Paths (user request)
                 // Combine adjacent straight segments into one
@@ -82,7 +83,31 @@ export class Generator {
         }
         return this.grid.paths.length > 1;
     }
+    tightenOnePath(path) {
+        let improved = false;
+        for (const [r, c] of path.points) {
+                    this.grid.setCell(r, c, 0);
+                }
 
+                // 2. Find the absolute shortest path now possible
+                const start = path.points[0];
+                const end = path.points[path.points.length - 1];
+                const newPoints = this.findShortestPath(start, end);
+
+                // 3. If shorter, keep it. If not, revert.
+                if (newPoints && newPoints.length < path.points.length) {
+                    path.points = newPoints;
+                    // Reset point types to Core (0)
+                    path.pointTypes = new Array(newPoints.length).fill(0);
+                    improved= true;
+                }
+
+                // 4. Mark grid again
+                for (const [r, c] of path.points) {
+                    this.grid.setCell(r, c, path.id);
+                }
+        return improved;
+            }
     // Aggressive optimization: Reroute paths to be as short as possible
     tightenPaths() {
         let improved = true;
@@ -256,6 +281,7 @@ export class Generator {
                 }
             }
         }
+        
     }
 
     findLongestPathFrom(r, c, maxDepth) {
@@ -447,6 +473,8 @@ export class Generator {
                 if (this.expandEndpointRandom(path, path.points.length - 1, isExtension)) {
                     changed = true;
                 }
+                if (changed)
+                    this.tightenOnePath(path);
             }
         }
     }
