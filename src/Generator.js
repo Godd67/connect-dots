@@ -633,6 +633,16 @@ export class Generator {
         }
         return res;
     }
+    
+findTurnCode(dir){
+
+                if (dir[0] === -1 && dir[1] === 0) return 1; // up
+                if (dir[0]  === 1 && dir[1] === 0) return 2;  // down
+                if (dir[0]  === 0 && dir[1] === -1) return 3; // left
+                if (dir[0]  === 0 && dir[1]  === 1) return 4;  // right
+                return 0;
+           
+}
 
     findShortestPath(start, end) {
         const [startR, startC] = start;
@@ -641,7 +651,7 @@ export class Generator {
         const q = [start];
         const parents = new Map();
         parents.set(`${startR},${startC}`, null);
-
+        let last_turn = [0,0];
         let found = false;
 
         while (q.length > 0) {
@@ -655,6 +665,13 @@ export class Generator {
             const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 
             for (const [dr, dc] of dirs) {
+                if ( last_turn[0]===this.findTurnCode([dr,dc]) && last_turn[1]<2){
+                    last_turn[1]++;
+                    continue;
+                        }
+                        else{
+                            last_turn=[this.findTurnCode([dr,dc]),0];
+                        }
                 const nr = r + dr, nc = c + dc;
                 const key = `${nr},${nc}`;
 
