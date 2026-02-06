@@ -648,38 +648,89 @@ findTurnCode(dir){
         const [startR, startC] = start;
         const [endR, endC] = end;
 
-        const q = [start];
+        const buildKey = (r, c, dir, run) => `${r},${c}|${dir ?? 'none'}|${run}`;
+
+        const q = [{ r: startR, c: startC, dir: null, run: 0 }];
         const parents = new Map();
-        parents.set(`${startR},${startC}`, null);
-        let last_turn = [0,0];
+        const startKey = buildKey(startR, startC, null, 0);
+        parents.set(startKey, null);
         let found = false;
+        let foundKey = null;
 
         while (q.length > 0) {
-            const [r, c] = q.shift();
+            const { r, c, dir, run } = q.shift();
+            const currKey = buildKey(r, c, dir, run);
 
             if (r === endR && c === endC) {
                 found = true;
+                foundKey = currKey;
                 break;
             }
 
             const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 
             for (const [dr, dc] of dirs) {
-                if ( last_turn[0]===this.findTurnCode([dr,dc]) && last_turn[1]<2){
-                    last_turn[1]++;
-                    continue;
-                        }
-                        else{
-                            last_turn=[this.findTurnCode([dr,dc]),0];
-                        }
-                const nr = r + dr, nc = c + dc;
-                const key = `${nr},${nc}`;
+                const newDir = this.findTurnCode([dr, dc]);
 
-                if (!parents.has(key)) {
+                // Prevent short U-turns: only allow reversing direction
+                // if the straight segment length is >= 3 cells.
+                if (dir !== null) {
+                    const isOpposite =
+                        (dir === 1 && newDir === 2) ||
+                        (dir === 2 && newDir === 1) ||
+                        (dir === 3 && newDir === 4) ||
+                        (dir === 4 && newDir === 3);
+
+                    if (isOpposite && run < 4) {
+                        continue;
+                    }
+                }
+
+                const nr = r + dr, nc = c + dc;
+
+                if (this.grid.isValid(nr, nc)) {
+                    if (this.grid.cells[nr][nc] !== 0 && !(nr === endR && nc === endC)) {
+                        continue;
+                    }
+
+                    const newRun = (dir === newDir) ? run + 1 : 1;
+                    const maxStraight = Math.floor(this.grid.size * 1/2);
+                    if (newRun > maxStraight) {
+                        continue;
+                    }
+                    const stateKey = buildKey(nr, nc, newDir, newRun);
+
+                    if (parents.has(stateKey)) {
+                        continue;
+                    }
+
+                    // Prevent self-touch: candidate cell cannot be adjacent to any
+                    // earlier path cell except the current tip.
+                    let touchesSelf = false;
+                    let checkKey = currKey;
+                    let skipFirst = true;
+                    while (checkKey) {
+                        const [pos] = checkKey.split("|");
+                        const [ar, ac] = pos.split(",").map(Number);
+                        if (skipFirst) {
+                            skipFirst = false;
+                        } else if (this.areNeighbors(nr, nc, ar, ac)) {
+                            touchesSelf = true;
+                            break;
+                        }
+                        const parent = parents.get(checkKey);
+                        if (!parent) break;
+                        checkKey = buildKey(parent.r, parent.c, parent.dir, parent.run);
+                    }
+
+                    if (touchesSelf) {
+                        continue;
+                    }
+
                     if (this.grid.isValid(nr, nc)) {
                         if (this.grid.cells[nr][nc] === 0 || (nr === endR && nc === endC)) {
-                            parents.set(key, [r, c]);
-                            q.push([nr, nc]);
+                            parents.set(stateKey, { r, c, dir, run });
+                            q.push({ r: nr, c: nc, dir: newDir, run: newRun });
                         }
                     }
                 }
@@ -689,11 +740,14 @@ findTurnCode(dir){
         if (!found) return null;
 
         const path = [];
-        let curr = end;
-        while (curr) {
-            path.push(curr);
-            const key = `${curr[0]},${curr[1]}`;
-            curr = parents.get(key);
+        let currKey = foundKey;
+        while (currKey) {
+            const [pos] = currKey.split("|");
+            const [cr, cc] = pos.split(",").map(Number);
+            path.push([cr, cc]);
+            const parent = parents.get(currKey);
+            if (!parent) break;
+            currKey = `${parent.r},${parent.c}|${parent.dir ?? 'none'}|${parent.run}`;
         }
         return path.reverse();
     }
