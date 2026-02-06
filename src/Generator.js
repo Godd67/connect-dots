@@ -187,7 +187,7 @@ export class Generator {
             });
 
             // Experimental: For first 3 pairs, force opposite quadrant
-            if (this.grid.paths.length < 3) {
+            if (this.grid.paths.length < 4) {
                 const half = Math.floor(this.grid.size / 2);
                 const startR = start[0] < half ? 0 : 1; // 0=Top, 1=Bottom
                 const startC = start[1] < half ? 0 : 1; // 0=Left, 1=Right
@@ -208,16 +208,16 @@ export class Generator {
                 }
             }
         }
-
+        else
         // Constraint 2: First pair distance rule
-        if (this.grid.paths.length === 0) {
-            const minDistance = Math.floor(this.grid.size * 2 / 3);
+        if (this.grid.paths.length <2) {
+            const minDistance = Math.floor(this.grid.size * 1 / 2);
             candidateList = candidateList.filter(([r, c]) => {
                 const distance = Math.abs(r - start[0]) + Math.abs(c - start[1]);
                 return distance >= minDistance;
             });
         }
-
+    
         if (candidateList.length === 0) return false;
 
         const idxB = this.random.range(0, candidateList.length);
@@ -370,6 +370,8 @@ export class Generator {
                     const isSameDir = (d1, d2) => d1[0] === d2[0] && d1[1] === d2[1];
 
                     let merged = false;
+                    let mergedPoints = null;
+                    let mergedTypes = null;
 
                     // Case 1: P1 End -> P2 Start
                     if (this.areNeighbors(p1End[0], p1End[1], p2Start[0], p2Start[1])) {
@@ -383,8 +385,8 @@ export class Generator {
 
                         if (isSameDir(d1, dConnect) && isSameDir(dConnect, d2)) {
                             // MERGE: Append P2 to P1
-                            p1.points = p1.points.concat(p2.points);
-                            p1.pointTypes = p1.pointTypes.concat(p2.pointTypes);
+                            mergedPoints = p1.points.concat(p2.points);
+                            mergedTypes = p1.pointTypes.concat(p2.pointTypes);
                             merged = true;
                         }
                     }
@@ -396,14 +398,23 @@ export class Generator {
 
                         if (isSameDir(d1, dConnect) && isSameDir(dConnect, d2)) {
                             // MERGE: Append reversed P2 to P1
-                            p1.points = p1.points.concat(p2.points.reverse());
-                            p1.pointTypes = p1.pointTypes.concat(p2.pointTypes.reverse());
+                            const p2PointsRev = [...p2.points].reverse();
+                            const p2TypesRev = [...p2.pointTypes].reverse();
+                            mergedPoints = p1.points.concat(p2PointsRev);
+                            mergedTypes = p1.pointTypes.concat(p2TypesRev);
                             merged = true;
                         }
                     }
                     // We don't need to check P1 Start because P1 End of another path will catch it, or i/j swap.
 
                     if (merged) {
+                        if (this.pathTouchesItself(mergedPoints)) {
+                            continue;
+                        }
+
+                        p1.points = mergedPoints;
+                        p1.pointTypes = mergedTypes;
+
                         // Update grid cells for the consumed path P2
                         for (const [r, c] of p2.points) {
                             this.grid.setCell(r, c, p1.id);
@@ -465,16 +476,34 @@ export class Generator {
             this.random.shuffle(this.grid.paths);
 
             for (const path of this.grid.paths) {
+                const prevPoints = path.points.map(([r, c]) => [r, c]);
+                const prevTypes = path.pointTypes.slice();
+                let changedLocal = false;
+
                 // Try expanding Start
                 if (this.expandEndpointRandom(path, 0, isExtension)) {
                     changed = true;
+                    changedLocal = true;
                 }
                 // Try expanding End
                 if (this.expandEndpointRandom(path, path.points.length - 1, isExtension)) {
                     changed = true;
+                    changedLocal = true;
                 }
-                if (changed)
+                if (changedLocal)
                     this.tightenOnePath(path);
+
+                if (changedLocal && this.pathTouchesItself(path.points)) {
+                    // Revert and re-mark to avoid self-touching paths
+                    for (const [r, c] of path.points) {
+                        this.grid.setCell(r, c, 0);
+                    }
+                    path.points = prevPoints;
+                    path.pointTypes = prevTypes;
+                    for (const [r, c] of path.points) {
+                        this.grid.setCell(r, c, path.id);
+                    }
+                }
             }
         }
     }
@@ -537,9 +566,9 @@ export class Generator {
                 }
 
                 if (dirBeforePrev) {
-                    const isUShape = (newDir[0] === -dirBeforePrev[0] && newDir[1] === -dirBeforePrev[1]);
-
-                    if (isUShape) {
+                    const dirBeforePrevCode = this.findTurnCode(dirBeforePrev);
+                    const newDirCode = this.findTurnCode(newDir);
+                    if (this.isUTurnDisallowed(dirBeforePrevCode, prevSegmentLength, newDirCode, 2)) {
                         continue;
                     }
                 }
@@ -644,22 +673,64 @@ findTurnCode(dir){
            
 }
 
+    isUTurnDisallowed(prevDirCode, runLength, newDirCode, minStraightCells) {
+        if (!prevDirCode || !newDirCode) return false;
+        const isOpposite =
+            (prevDirCode === 1 && newDirCode === 2) ||
+            (prevDirCode === 2 && newDirCode === 1) ||
+            (prevDirCode === 3 && newDirCode === 4) ||
+            (prevDirCode === 4 && newDirCode === 3);
+        return isOpposite && runLength < minStraightCells;
+    }
+
+    makeStateKey(r, c, dir, run) {
+        return `${r},${c}|${dir ?? 'none'}|${run}`;
+    }
+
+    wouldTouchSelf(nr, nc, currKey, parents) {
+        let checkKey = currKey;
+        let skipFirst = true;
+        while (checkKey) {
+            const [pos] = checkKey.split("|");
+            const [ar, ac] = pos.split(",").map(Number);
+            if (skipFirst) {
+                skipFirst = false;
+            } else if (this.areNeighbors(nr, nc, ar, ac)) {
+                return true;
+            }
+            const parent = parents.get(checkKey);
+            if (!parent) break;
+            checkKey = this.makeStateKey(parent.r, parent.c, parent.dir, parent.run);
+        }
+        return false;
+    }
+
+    pathTouchesItself(points) {
+        for (let i = 0; i < points.length; i++) {
+            const [r1, c1] = points[i];
+            for (let j = 0; j < i - 1; j++) {
+                const [r2, c2] = points[j];
+                if (r1 === r2 && c1 === c2) return true;
+                if (this.areNeighbors(r1, c1, r2, c2)) return true;
+            }
+        }
+        return false;
+    }
+
     findShortestPath(start, end) {
         const [startR, startC] = start;
         const [endR, endC] = end;
 
-        const buildKey = (r, c, dir, run) => `${r},${c}|${dir ?? 'none'}|${run}`;
-
         const q = [{ r: startR, c: startC, dir: null, run: 0 }];
         const parents = new Map();
-        const startKey = buildKey(startR, startC, null, 0);
+        const startKey = this.makeStateKey(startR, startC, null, 0);
         parents.set(startKey, null);
         let found = false;
         let foundKey = null;
 
         while (q.length > 0) {
             const { r, c, dir, run } = q.shift();
-            const currKey = buildKey(r, c, dir, run);
+            const currKey = this.makeStateKey(r, c, dir, run);
 
             if (r === endR && c === endC) {
                 found = true;
@@ -673,15 +744,9 @@ findTurnCode(dir){
                 const newDir = this.findTurnCode([dr, dc]);
 
                 // Prevent short U-turns: only allow reversing direction
-                // if the straight segment length is >= 3 cells.
+                // if the straight segment length is >= 5 cells.
                 if (dir !== null) {
-                    const isOpposite =
-                        (dir === 1 && newDir === 2) ||
-                        (dir === 2 && newDir === 1) ||
-                        (dir === 3 && newDir === 4) ||
-                        (dir === 4 && newDir === 3);
-
-                    if (isOpposite && run < 4) {
+                    if (this.isUTurnDisallowed(dir, run, newDir, 5)) {
                         continue;
                     }
                 }
@@ -694,36 +759,17 @@ findTurnCode(dir){
                     }
 
                     const newRun = (dir === newDir) ? run + 1 : 1;
-                    const maxStraight = Math.floor(this.grid.size * 1/2);
+                    const maxStraight = Math.floor(this.grid.size * 1/3);
                     if (newRun > maxStraight) {
                         continue;
                     }
-                    const stateKey = buildKey(nr, nc, newDir, newRun);
+                    const stateKey = this.makeStateKey(nr, nc, newDir, newRun);
 
                     if (parents.has(stateKey)) {
                         continue;
                     }
 
-                    // Prevent self-touch: candidate cell cannot be adjacent to any
-                    // earlier path cell except the current tip.
-                    let touchesSelf = false;
-                    let checkKey = currKey;
-                    let skipFirst = true;
-                    while (checkKey) {
-                        const [pos] = checkKey.split("|");
-                        const [ar, ac] = pos.split(",").map(Number);
-                        if (skipFirst) {
-                            skipFirst = false;
-                        } else if (this.areNeighbors(nr, nc, ar, ac)) {
-                            touchesSelf = true;
-                            break;
-                        }
-                        const parent = parents.get(checkKey);
-                        if (!parent) break;
-                        checkKey = buildKey(parent.r, parent.c, parent.dir, parent.run);
-                    }
-
-                    if (touchesSelf) {
+                    if (this.wouldTouchSelf(nr, nc, currKey, parents)) {
                         continue;
                     }
 
@@ -747,7 +793,7 @@ findTurnCode(dir){
             path.push([cr, cc]);
             const parent = parents.get(currKey);
             if (!parent) break;
-            currKey = `${parent.r},${parent.c}|${parent.dir ?? 'none'}|${parent.run}`;
+            currKey = this.makeStateKey(parent.r, parent.c, parent.dir, parent.run);
         }
         return path.reverse();
     }
