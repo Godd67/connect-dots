@@ -74,6 +74,7 @@ let undoStack = [];
 let redoStack = [];
 let prevUserPaths = null;
 let loadedSeed = null; // Track the seed of the active grid
+let seedDirty = false; // Track if user edited the seed input
 
 // Rendering constants
 const DEFAULT_CELL_SIZE = 50;
@@ -137,7 +138,7 @@ function init() {
   generateBtn.addEventListener('click', () => {
     // If user has not changed the seed input manually, randomize it.
     // This allows "New" to truly feel like a new level every time.
-    if (seedInput.value === loadedSeed) {
+    if (!seedDirty && seedInput.value === loadedSeed) {
       seedInput.value = '';
     }
     generate();
@@ -155,6 +156,7 @@ function init() {
   };
 
   seedInput.addEventListener('input', () => {
+    seedDirty = true;
     const seed = seedInput.value.trim();
     const match = seed.match(/^(\d+)([HS])(.+)$/);
     if (match) {
@@ -595,6 +597,7 @@ function generate() {
   const modeChar = hardMode ? 'H' : 'S';
   const displaySeed = `${size}${modeChar}${seed}`;
   seedInput.value = displaySeed;
+  seedDirty = false;
 
   // Reset state and switch to a fresh empty grid immediately
   resetGameState();
