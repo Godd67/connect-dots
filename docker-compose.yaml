@@ -3,6 +3,7 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
+      target: frontend
     container_name: dot-connections-game
     ports:
       - "7777:80"
@@ -16,7 +17,8 @@ services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
+      target: backend
     container_name: dot-connections-api
     ports:
       - "3000:3000"
