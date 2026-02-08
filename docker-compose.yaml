@@ -1,8 +1,24 @@
 services:
   game:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     container_name: dot-connections-game
     ports:
       - "7777:80"
-    network_mode: bridge # Fixes "could not find available IPv4 address pool" error
+    network_mode: bridge
+    restart: always
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: dot-connections-api
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    network_mode: bridge
     restart: always
