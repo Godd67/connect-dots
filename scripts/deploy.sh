@@ -12,7 +12,7 @@ git pull
 # 2. Build with automatic timestamped version
 # Note: The Dockerfile now handles the timestamp generation automatically
 echo "🛠️ Building Docker images..."
-docker compose build --no-cache
+docker compose build
 
 # 3. Start services
 echo "⚡ Starting services..."
