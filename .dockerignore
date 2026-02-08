@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+dist
+.env
+.git
+.gitignore
+*.png
+*.json
+!package.json
+!package-lock.json
+!test.json
