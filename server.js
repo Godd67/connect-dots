@@ -47,6 +47,10 @@ const auth = (req, res, next) => {
     next();
 };
 
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', seed: req.seed });
+});
+
 app.get('/api/getPuzzle', auth, (req, res) => {
     const size = parseInt(req.query.size);
     const modeStr = req.query.mode || 'normal';

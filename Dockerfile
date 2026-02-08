@@ -1,5 +1,16 @@
 # Stage 1: Build
 FROM node:20-alpine as build-stage
+
+# Install dependencies for node-canvas (needed if npm install tries to build it)
+RUN apk add --no-cache \
+    build-base \
+    g++ \
+    cairo-dev \
+    pango-dev \
+    giflib-dev \
+    jpeg-dev \
+    librsvg-dev
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm install

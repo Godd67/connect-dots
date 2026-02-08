@@ -6,11 +6,12 @@ services:
     container_name: dot-connections-game
     ports:
       - "7777:80"
+    network_mode: bridge
+    extra_hosts:
+      - "api:host-gateway"
     restart: always
     depends_on:
       - api
-    networks:
-      - dots-network
 
   api:
     build:
@@ -21,10 +22,5 @@ services:
       - "3000:3000"
     env_file:
       - .env
+    network_mode: bridge
     restart: always
-    networks:
-      - dots-network
-
-networks:
-  dots-network:
-    driver: bridge

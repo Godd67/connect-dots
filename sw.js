@@ -1,4 +1,4 @@
-const CACHE_NAME = 'connect-dots-v5';
+const CACHE_NAME = 'connect-dots-v6';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -40,6 +40,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+    // Skip API requests - let the browser handle them directly
+    if (event.request.url.includes('/api/')) {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
             .then((networkResponse) => {
