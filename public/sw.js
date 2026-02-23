@@ -42,8 +42,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-    // Skip API requests - let the browser handle them directly
-    if (event.request.url.includes('/api/')) {
+    const url = new URL(event.request.url);
+
+    // Skip API requests and cross-origin requests (e.g., Cloudflare Insights)
+    // Intercepting cross-origin requests often triggers CORS/SRI failures.
+    if (url.origin !== self.location.origin || url.pathname.includes('/api/')) {
         return;
     }
 
