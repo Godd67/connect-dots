@@ -108,8 +108,17 @@
         <h2>Settings</h2>
 
         <div class="setting-item">
-          <label for="setting-default-size">Default Grid Size:</label>
-          <input type="number" id="setting-default-size" min="5" max="20" value="10">
+          <label for="setting-default-size">Default Grid Size (Width):</label>
+          <input type="number" id="setting-default-size" min="5" max="25" value="10">
+        </div>
+
+        <div class="setting-item">
+          <label for="setting-aspect-ratio">Game Field:</label>
+          <select id="setting-aspect-ratio">
+            <option value="1:1">Square (1:1)</option>
+            <option value="3:4">3:4</option>
+            <option value="9:16">9:16</option>
+          </select>
         </div>
 
         <div class="setting-item">

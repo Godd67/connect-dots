@@ -21,13 +21,21 @@ const settingsOpenBtn = document.getElementById('settings-open-btn');
 const settingsCloseBtn = document.getElementById('settings-close-btn');
 
 const settingDefaultSize = document.getElementById('setting-default-size');
+const settingAspectRatio = document.getElementById('setting-aspect-ratio');
 const settingApplause = document.getElementById('setting-applause');
 const settingNav = document.getElementById('setting-nav');
+
+const ASPECT_RATIOS = {
+  '1:1': 1,
+  '3:4': 4 / 3, // Height = Width * (4/3)
+  '9:16': 16 / 9
+};
 
 // Settings Management
 const Settings = {
   data: {
     defaultGridSize: 10,
+    aspectRatio: '1:1',
     applauseSound: true,
     navMode: 'drag'
   },
@@ -40,6 +48,9 @@ const Settings = {
       } catch (e) {
         console.error("Failed to parse settings", e);
       }
+    } else {
+      // Default based on device
+      this.data.aspectRatio = isMobile() ? '9:16' : '1:1';
     }
     this.applyToUI();
   },
@@ -50,12 +61,14 @@ const Settings = {
 
   applyToUI() {
     settingDefaultSize.value = this.data.defaultGridSize;
+    settingAspectRatio.value = this.data.aspectRatio;
     settingApplause.checked = this.data.applauseSound;
     settingNav.value = this.data.navMode;
   },
 
   syncFromUI() {
     this.data.defaultGridSize = parseInt(settingDefaultSize.value) || 10;
+    this.data.aspectRatio = settingAspectRatio.value || '1:1';
     this.data.applauseSound = settingApplause.checked;
     this.data.navMode = settingNav.value;
     this.save();
@@ -127,11 +140,16 @@ function playApplause() {
   });
 }
 
-function calculateCellSize(gridSize) {
+function calculateCellSize(cols, rows) {
   if (!isMobile()) return DEFAULT_CELL_SIZE;
   const availableWidth = document.documentElement.clientWidth || window.innerWidth;
+  const availableHeight = document.documentElement.clientHeight || window.innerHeight;
   const maxWidth = availableWidth - PADDING * 2 - 30; // 30 extra for safety margin
-  return Math.floor(maxWidth / gridSize);
+  const maxHeight = availableHeight - 200; // Leave room for header/controls
+
+  const cellW = Math.floor(maxWidth / cols);
+  const cellH = Math.floor(maxHeight / rows);
+  return Math.min(cellW, cellH, DEFAULT_CELL_SIZE);
 }
 
 function init() {
@@ -250,6 +268,10 @@ function init() {
     settingsModal.classList.add('hidden');
   });
 
+  settingAspectRatio.addEventListener('change', () => {
+    Settings.syncFromUI();
+  });
+
   // Close modal on outside click
   window.addEventListener('click', (e) => {
     if (e.target === settingsModal) {
@@ -363,7 +385,7 @@ function getCellFromCoords(x, y) {
   const c = Math.floor(canvasX / CELL_SIZE);
   const r = Math.floor(canvasY / CELL_SIZE);
 
-  if (r >= 0 && r < grid.size && c >= 0 && c < grid.size) {
+  if (r >= 0 && r < grid.rows && c >= 0 && c < grid.cols) {
     return [r, c];
   }
   return null;
@@ -571,19 +593,19 @@ function resetGameState() {
 
 function generate() {
   let seed = seedInput.value.trim();
-  let size = gridSize;
+  let cols = gridSize;
   let hardMode = hardModeBtn.classList.contains('active');
 
   // Pattern: [Size][Mode][RandomPart] (e.g., 10HB7AQ66)
   const match = seed.match(/^(\d+)([HS])(.+)$/);
   if (match) {
-    size = parseInt(match[1]);
+    cols = parseInt(match[1]);
     hardMode = (match[2] === 'H');
     seed = match[3];
 
     // Update UI to match seed settings
-    gridSize = size;
-    sizeDisplay.textContent = size;
+    gridSize = cols;
+    sizeDisplay.textContent = cols;
     if (hardMode) hardModeBtn.classList.add('active');
     else hardModeBtn.classList.remove('active');
   }
@@ -595,21 +617,26 @@ function generate() {
 
   // Unified seed for display/sharing
   const modeChar = hardMode ? 'H' : 'S';
-  const displaySeed = `${size}${modeChar}${seed}`;
+  const displaySeed = `${cols}${modeChar}${seed}`;
   seedInput.value = displaySeed;
   seedDirty = false;
 
+  // Calculate rows based on aspect ratio
+  const ratio = ASPECT_RATIOS[Settings.data.aspectRatio] || 1;
+  const rows = Math.round(cols * ratio);
+
   // Reset state and switch to a fresh empty grid immediately
   resetGameState();
-  grid = new Grid(size);
+  grid = new Grid(cols, rows);
 
   const random = new Random(seed);
 
   // Recalculate dynamic sizing for mobile
-  CELL_SIZE = calculateCellSize(size);
+  CELL_SIZE = calculateCellSize(cols, rows);
 
-  // Make dot size relative to grid size
-  const dynamicRatio = 0.28 + ((size - 5) / 15) * 0.10;
+  // Make dot size relative to grid size (use average or max of dims)
+  const avgDim = (cols + rows) / 2;
+  const dynamicRatio = 0.28 + ((avgDim - 5) / 15) * 0.10;
   DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
 
   generateBtn.disabled = true;
@@ -625,8 +652,8 @@ function generate() {
       if (generator.generate()) {
         loadedSeed = displaySeed; // Track the full display seed
         // Explicitly mark stones in generated grid as -1
-        for (let r = 0; r < grid.size; r++) {
-          for (let c = 0; c < grid.size; c++) {
+        for (let r = 0; r < grid.rows; r++) {
+          for (let c = 0; c < grid.cols; c++) {
             if (grid.cells[r][c] === 0) grid.cells[r][c] = -1;
           }
         }
@@ -645,9 +672,10 @@ function generate() {
 function draw() {
   if (!grid) return;
 
-  const size = grid.size;
-  const width = size * CELL_SIZE + PADDING * 2;
-  const height = size * CELL_SIZE + PADDING * 2;
+  const cols = grid.cols;
+  const rows = grid.rows;
+  const width = cols * CELL_SIZE + PADDING * 2;
+  const height = rows * CELL_SIZE + PADDING * 2;
 
   // Handle High-DPI (Retina) scaling
   if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
@@ -663,8 +691,8 @@ function draw() {
   ctx.fillStyle = '#222';
   ctx.fillRect(0, 0, width, height);
 
-  for (let r = 0; r < size; r++) {
-    for (let c = 0; c < size; c++) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
       const x = PADDING + c * CELL_SIZE;
       const y = PADDING + r * CELL_SIZE;
       const cellVal = grid.cells[r][c];
@@ -753,12 +781,13 @@ function draw() {
   ctx.strokeStyle = '#444';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let i = 0; i <= size; i++) {
+  for (let i = 0; i <= cols; i++) {
     ctx.moveTo(PADDING + i * CELL_SIZE, PADDING);
-    ctx.lineTo(PADDING + i * CELL_SIZE, PADDING + size * CELL_SIZE);
-
+    ctx.lineTo(PADDING + i * CELL_SIZE, PADDING + rows * CELL_SIZE);
+  }
+  for (let i = 0; i <= rows; i++) {
     ctx.moveTo(PADDING, PADDING + i * CELL_SIZE);
-    ctx.lineTo(PADDING + size * CELL_SIZE, PADDING + i * CELL_SIZE);
+    ctx.lineTo(PADDING + cols * CELL_SIZE, PADDING + i * CELL_SIZE);
   }
   ctx.stroke();
 

@@ -1,13 +1,14 @@
 export class Grid {
-    constructor(size) {
-        this.size = size;
+    constructor(cols, rows) {
+        this.cols = cols;
+        this.rows = rows;
         // 0: empty, >0: path id
-        this.cells = Array.from({ length: size }, () => Array(size).fill(0));
+        this.cells = Array.from({ length: rows }, () => Array(cols).fill(0));
         this.paths = []; // { id, color, points: [[r,c], ...] }
     }
 
     isValid(r, c) {
-        return r >= 0 && r < this.size && c >= 0 && c < this.size;
+        return r >= 0 && r < this.rows && c >= 0 && c < this.cols;
     }
 
     isEmpty(r, c) {

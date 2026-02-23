@@ -86,28 +86,28 @@ export class Generator {
     tightenOnePath(path) {
         let improved = false;
         for (const [r, c] of path.points) {
-                    this.grid.setCell(r, c, 0);
-                }
+            this.grid.setCell(r, c, 0);
+        }
 
-                // 2. Find the absolute shortest path now possible
-                const start = path.points[0];
-                const end = path.points[path.points.length - 1];
-                const newPoints = this.findShortestPath(start, end);
+        // 2. Find the absolute shortest path now possible
+        const start = path.points[0];
+        const end = path.points[path.points.length - 1];
+        const newPoints = this.findShortestPath(start, end);
 
-                // 3. If shorter, keep it. If not, revert.
-                if (newPoints && newPoints.length < path.points.length) {
-                    path.points = newPoints;
-                    // Reset point types to Core (0)
-                    path.pointTypes = new Array(newPoints.length).fill(0);
-                    improved= true;
-                }
+        // 3. If shorter, keep it. If not, revert.
+        if (newPoints && newPoints.length < path.points.length) {
+            path.points = newPoints;
+            // Reset point types to Core (0)
+            path.pointTypes = new Array(newPoints.length).fill(0);
+            improved = true;
+        }
 
-                // 4. Mark grid again
-                for (const [r, c] of path.points) {
-                    this.grid.setCell(r, c, path.id);
-                }
+        // 4. Mark grid again
+        for (const [r, c] of path.points) {
+            this.grid.setCell(r, c, path.id);
+        }
         return improved;
-            }
+    }
     // Aggressive optimization: Reroute paths to be as short as possible
     tightenPaths() {
         let improved = true;
@@ -188,17 +188,18 @@ export class Generator {
 
             // Experimental: For first 3 pairs, force opposite quadrant
             if (this.grid.paths.length < 4) {
-                const half = Math.floor(this.grid.size / 2);
-                const startR = start[0] < half ? 0 : 1; // 0=Top, 1=Bottom
-                const startC = start[1] < half ? 0 : 1; // 0=Left, 1=Right
+                const halfR = Math.floor(this.grid.rows / 2);
+                const halfC = Math.floor(this.grid.cols / 2);
+                const startRQuad = start[0] < halfR ? 0 : 1; // 0=Top, 1=Bottom
+                const startCQuad = start[1] < halfC ? 0 : 1; // 0=Left, 1=Right
 
                 // Target strictly opposite (Top-Left -> Bottom-Right, etc.)
-                const targetR = 1 - startR;
-                const targetC = 1 - startC;
+                const targetR = 1 - startRQuad;
+                const targetC = 1 - startCQuad;
 
                 const spreadCandidates = candidateList.filter(([r, c]) => {
-                    const rQuad = r < half ? 0 : 1;
-                    const cQuad = c < half ? 0 : 1;
+                    const rQuad = r < halfR ? 0 : 1;
+                    const cQuad = c < halfC ? 0 : 1;
                     return rQuad === targetR && cQuad === targetC;
                 });
 
@@ -209,15 +210,15 @@ export class Generator {
             }
         }
         else
-        // Constraint 2: First pair distance rule
-        if (this.grid.paths.length <2) {
-            const minDistance = Math.floor(this.grid.size * 1 / 2);
-            candidateList = candidateList.filter(([r, c]) => {
-                const distance = Math.abs(r - start[0]) + Math.abs(c - start[1]);
-                return distance >= minDistance;
-            });
-        }
-    
+            // Constraint 2: First pair distance rule
+            if (this.grid.paths.length < 2) {
+                const minDistance = Math.floor(Math.max(this.grid.cols, this.grid.rows) * 1 / 2);
+                candidateList = candidateList.filter(([r, c]) => {
+                    const distance = Math.abs(r - start[0]) + Math.abs(c - start[1]);
+                    return distance >= minDistance;
+                });
+            }
+
         if (candidateList.length === 0) return false;
 
         const idxB = this.random.range(0, candidateList.length);
@@ -250,12 +251,13 @@ export class Generator {
     }
 
     fillSmallVoids() {
-        const size = this.grid.size;
+        const cols = this.grid.cols;
+        const rows = this.grid.rows;
 
         // Greedy Longest Path Filling
         // For every empty cell, try to find the longest simple path we can form starting there.
-        for (let r = 0; r < size; r++) {
-            for (let c = 0; c < size; c++) {
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
                 if (!this.grid.isEmpty(r, c)) continue;
 
                 // Try to find the longest linear path possible in the current empty space
@@ -268,8 +270,8 @@ export class Generator {
         }
 
         // Keep 2x2 L-shape checks as a fallback for clusters where DFS didn't find a long path
-        for (let r = 0; r < size - 1; r++) {
-            for (let c = 0; c < size - 1; c++) {
+        for (let r = 0; r < rows - 1; r++) {
+            for (let c = 0; c < cols - 1; c++) {
                 if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c)) {
                     this.addTargetedPath([[r, c + 1], [r, c], [r + 1, c]]);
                 } else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c + 1)) {
@@ -281,7 +283,7 @@ export class Generator {
                 }
             }
         }
-        
+
     }
 
     findLongestPathFrom(r, c, maxDepth) {
@@ -444,8 +446,8 @@ export class Generator {
 
         // 2. Re-assign IDs and update grid matrix
         // Reset matrix first
-        for (let r = 0; r < this.grid.size; r++) {
-            for (let c = 0; c < this.grid.size; c++) {
+        for (let r = 0; r < this.grid.rows; r++) {
+            for (let c = 0; c < this.grid.cols; c++) {
                 this.grid.setCell(r, c, 0);
             }
         }
@@ -655,23 +657,23 @@ export class Generator {
 
     getAllEmpty() {
         const res = [];
-        for (let r = 0; r < this.grid.size; r++) {
-            for (let c = 0; c < this.grid.size; c++) {
+        for (let r = 0; r < this.grid.rows; r++) {
+            for (let c = 0; c < this.grid.cols; c++) {
                 if (this.grid.isEmpty(r, c)) res.push([r, c]);
             }
         }
         return res;
     }
-    
-findTurnCode(dir){
 
-                if (dir[0] === -1 && dir[1] === 0) return 1; // up
-                if (dir[0]  === 1 && dir[1] === 0) return 2;  // down
-                if (dir[0]  === 0 && dir[1] === -1) return 3; // left
-                if (dir[0]  === 0 && dir[1]  === 1) return 4;  // right
-                return 0;
-           
-}
+    findTurnCode(dir) {
+
+        if (dir[0] === -1 && dir[1] === 0) return 1; // up
+        if (dir[0] === 1 && dir[1] === 0) return 2;  // down
+        if (dir[0] === 0 && dir[1] === -1) return 3; // left
+        if (dir[0] === 0 && dir[1] === 1) return 4;  // right
+        return 0;
+
+    }
 
     isUTurnDisallowed(prevDirCode, runLength, newDirCode, minStraightCells) {
         if (!prevDirCode || !newDirCode) return false;
@@ -759,7 +761,8 @@ findTurnCode(dir){
                     }
 
                     const newRun = (dir === newDir) ? run + 1 : 1;
-                    const maxStraight = Math.floor(this.grid.size * 1/3);
+                    const maxDim = (newDir === 1 || newDir === 2) ? this.grid.rows : this.grid.cols;
+                    const maxStraight = Math.floor(maxDim * 1 / 3);
                     if (newRun > maxStraight) {
                         continue;
                     }
