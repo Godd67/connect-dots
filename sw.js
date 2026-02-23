@@ -1,4 +1,4 @@
-const CACHE_NAME = 'connect-dots-v6';
+const CACHE_NAME = 'connect-dots-v7';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
