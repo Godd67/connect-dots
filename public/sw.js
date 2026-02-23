@@ -8,7 +8,11 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
-    self.skipWaiting(); // Force this SW to become active immediately
+    self.skipWaiting();
+    if (typeof caches === 'undefined') {
+        console.warn('Caches API not available (Incognito mode?)');
+        return;
+    }
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             console.log('Opened cache');
@@ -18,6 +22,9 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+    if (typeof caches === 'undefined') {
+        return;
+    }
     event.waitUntil(
         Promise.all([
             self.clients.claim(), // Take control of all open clients immediately
@@ -37,6 +44,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     // Skip API requests - let the browser handle them directly
     if (event.request.url.includes('/api/')) {
+        return;
+    }
+
+    if (typeof caches === 'undefined') {
+        event.respondWith(fetch(event.request));
         return;
     }
 

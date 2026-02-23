@@ -5,639 +5,175 @@ export class Generator {
         this.grid = grid;
         this.hardMode = options.hardMode || false;
         this.random = options.random;
+        this.maxSymmetryAttempts = 5;
+        this.totalAttemptCount = 0;
+        this.MAX_SOLVE_TIME = 2000; // ms
+        this.startTime = 0;
     }
 
     generate() {
-        // Global retry loop for the entire grid generation
-        for (let attempt = 0; attempt < 500; attempt++) {
+        this.startTime = Date.now();
+        this.totalAttemptCount = 0;
+
+        // Try multiple times if recursion hits a time limit or fails
+        for (let i = 0; i < 50; i++) {
             this.grid.reset();
-
-            // Phase 1: Generative greedy placement
-            if (this.fillGreedy()) {
-                // Phase 2: Random Expansion (Shape forming)
-                this.expandPathsRandom(false);
-
-                // Phase 3: Prune "dumb" geometric loops (optimization)
-                // This is the FINAL step to ensure no artifacts remain.
-                //this.tightenPaths();
-
-                // Phase 4: Fill residual bundles EARLY (user request)
-                // Move this UP so we prioritize filling voids with NEW short paths
-                // rather than forcing existing paths to wind around.
-                this.fillSmallVoids();
-
-                // Phase 5: Re-Expand Random
-                // Re-filling voids created by tightening. 
-                // THESE are the "extensions" user wants to see distinguished.
-                //this.expandPathsRandom(true);
-
-                // Phase 5.5: Final Pruning (User Request)
-                // Prune any sub-optimal loops formed during expansion/filling phases
-                //this.tightenPaths();
-
-                // Phase 5.6: Final Polish Expansion
-                // Last ditch effort to fill any holes created by final tightening
-                //this.expandPathsRandom(true);
-
-                // Phase 5.7: Tighten ONCE MORE to catch spirals from the last expansion
-                //this.tightenPaths();
-
-                // Phase 5.75: Final Clump Cleanup (User Request)
-                // One last check to catch any 3+ clumps that appeared after tightening
-                //this.fillSmallVoids();
-
-                // Phase 5.8: Merge Collinear Paths (user request)
-                // Combine adjacent straight segments into one
-                this.mergeCollinearPaths();
-
-                // Phase 6: Shuffle Path IDs (user request)
+            if (this.solve()) {
                 this.shufflePathIds();
-
-                // Phase 7: Final Validation
-                if (this.validateGrid()) {
-                    console.log(`Generated valid grid on attempt ${attempt + 1} (Hard Mode: ${this.hardMode})`);
-                    return true;
-                } else {
-                    // console.log("Validation failed on attempt", attempt);
-                }
-            } else {
-                // console.log("Fill greedy failed on attempt", attempt);
+                console.log(`Puzzles generated successfully in ${Date.now() - this.startTime}ms`);
+                return true;
             }
         }
-        console.error("Failed to generate grid after 500 attempts");
         return false;
     }
 
-    fillGreedy() {
-        let failures = 0;
-        let attempts = 0;
-        const maxAttempts = 1000;
+    solve() {
+        // Safety timeout to prevent browser hang
+        if (Date.now() - this.startTime > this.MAX_SOLVE_TIME) return false;
 
-        while (failures < 50 && attempts < maxAttempts) {
-            attempts++;
-            if (this.addPair()) {
-                failures = 0;
-            } else {
-                failures++;
-            }
-        }
-        return this.grid.paths.length > 1;
-    }
-    tightenOnePath(path) {
-        let improved = false;
-        for (const [r, c] of path.points) {
-            this.grid.setCell(r, c, 0);
+        const start = this.findNextEmpty();
+        if (!start) {
+            // Check if we have enough paths to be a good puzzle
+            return this.grid.paths.length >= Math.floor((this.grid.cols * this.grid.rows) / 8);
         }
 
-        // 2. Find the absolute shortest path now possible
-        const start = path.points[0];
-        const end = path.points[path.points.length - 1];
-        const newPoints = this.findShortestPath(start, end);
+        const [r, c] = start;
+        const potentialPaths = this.findPossiblePaths(r, c);
 
-        // 3. If shorter, keep it. If not, revert.
-        if (newPoints && newPoints.length < path.points.length) {
-            path.points = newPoints;
-            // Reset point types to Core (0)
-            path.pointTypes = new Array(newPoints.length).fill(0);
-            improved = true;
-        }
+        // Shuffle paths for variety
+        this.random.shuffle(potentialPaths);
 
-        // 4. Mark grid again
-        for (const [r, c] of path.points) {
-            this.grid.setCell(r, c, path.id);
-        }
-        return improved;
-    }
-    // Aggressive optimization: Reroute paths to be as short as possible
-    tightenPaths() {
-        let improved = true;
-        while (improved) {
-            improved = false;
-            // Iterate all paths
-            for (const path of this.grid.paths) {
-                // 1. Clear this path from the grid temporarily
-                for (const [r, c] of path.points) {
-                    this.grid.setCell(r, c, 0);
-                }
-
-                // 2. Find the absolute shortest path now possible
-                const start = path.points[0];
-                const end = path.points[path.points.length - 1];
-                const newPoints = this.findShortestPath(start, end);
-
-                // 3. If shorter, keep it. If not, revert.
-                if (newPoints && newPoints.length < path.points.length) {
-                    path.points = newPoints;
-                    // Reset point types to Core (0)
-                    path.pointTypes = new Array(newPoints.length).fill(0);
-                    improved = true;
-                }
-
-                // 4. Mark grid again
-                for (const [r, c] of path.points) {
-                    this.grid.setCell(r, c, path.id);
-                }
-            }
-        }
-    }
-
-    validateGrid() {
-        // Check constraints
-        for (const path of this.grid.paths) {
-            // Constraint: Path must have length >= 3
-            if (path.points.length < 3) return false;
-
-            const start = path.points[0];
-            const end = path.points[path.points.length - 1];
-
-            // In Hard Mode, check if any path still share a row/column
-            // EXEMPTION: Filter paths (added to fill 1x3 gaps) are allowed to be straight
-            if (this.hardMode && !path.isFiller) {
-                if (start[0] === end[0] || start[1] === end[1]) return false;
-            }
-
-            // Check if Start and End are adjacent (distance 1)
-            // This prevents "U-turn" shapes where dots are neighbors.
-            if (this.areNeighbors(start[0], start[1], end[0], end[1])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    addPair() {
-        // 1. Pick two random empty cells
-        const empties = this.getAllEmpty();
-        if (empties.length < 2) return false;
-
-        // random A
-        const idxA = this.random.range(0, empties.length);
-        const start = empties[idxA];
-
-        // Remove A from list to pick B
-        empties.splice(idxA, 1);
-
-        // Filter B candidates
-        let candidateList = empties;
-
-        // Constraint 1: Hard Mode (No same row or column)
-        if (this.hardMode) {
-            candidateList = candidateList.filter(([r, c]) => {
-                return r !== start[0] && c !== start[1];
-            });
-
-            // Experimental: For first 3 pairs, force opposite quadrant
-            if (this.grid.paths.length < 4) {
-                const halfR = Math.floor(this.grid.rows / 2);
-                const halfC = Math.floor(this.grid.cols / 2);
-                const startRQuad = start[0] < halfR ? 0 : 1; // 0=Top, 1=Bottom
-                const startCQuad = start[1] < halfC ? 0 : 1; // 0=Left, 1=Right
-
-                // Target strictly opposite (Top-Left -> Bottom-Right, etc.)
-                const targetR = 1 - startRQuad;
-                const targetC = 1 - startCQuad;
-
-                const spreadCandidates = candidateList.filter(([r, c]) => {
-                    const rQuad = r < halfR ? 0 : 1;
-                    const cQuad = c < halfC ? 0 : 1;
-                    return rQuad === targetR && cQuad === targetC;
-                });
-
-                // Only apply if it doesn't kill all candidates
-                if (spreadCandidates.length > 0) {
-                    candidateList = spreadCandidates;
-                }
-            }
-        }
-        else
-            // Constraint 2: First pair distance rule
-            if (this.grid.paths.length < 2) {
-                const minDistance = Math.floor(Math.max(this.grid.cols, this.grid.rows) * 1 / 2);
-                candidateList = candidateList.filter(([r, c]) => {
-                    const distance = Math.abs(r - start[0]) + Math.abs(c - start[1]);
-                    return distance >= minDistance;
-                });
-            }
-
-        if (candidateList.length === 0) return false;
-
-        const idxB = this.random.range(0, candidateList.length);
-        const end = candidateList[idxB];
-
-        // 2. Find Shortest Path (BFS)
-        const pathPoints = this.findShortestPath(start, end);
-
-        // 3. Validate
-        // Path length >= 3 (Start, Mid, End) -> 2 edges, separation 1 square
-        if (pathPoints && pathPoints.length >= 3) {
+        for (const pathPoints of potentialPaths) {
             const pathId = this.grid.paths.length + 1;
 
             // Mark grid
-            for (const [r, c] of pathPoints) {
-                this.grid.setCell(r, c, pathId);
+            for (const [pr, pc] of pathPoints) {
+                this.grid.setCell(pr, pc, pathId);
             }
 
-            this.grid.paths.push({
+            const pathObj = {
                 id: pathId,
                 points: pathPoints,
-                // Initialize point types (0 = core)
-                pointTypes: new Array(pathPoints.length).fill(0),
                 color: this.getDistinctColor(pathId)
-            });
-            return true;
+            };
+            this.grid.paths.push(pathObj);
+
+            // Heuristic check: Ensure no isolated cells are created
+            if (this.isBoardStillSolvable()) {
+                if (this.solve()) return true;
+            }
+
+            // Backtrack
+            this.grid.paths.pop();
+            for (const [pr, pc] of pathPoints) {
+                this.grid.setCell(pr, pc, 0);
+            }
         }
+
+        // Sometimes we can't find a path from this start cell.
+        // In "Connect the Dots", every cell should be part of a path.
+        // However, we can also place "stones" (obstacles) if we want to allow empty-ish boards.
+        // Let's try skipping this cell as a "stone" if we are stuck.
+
+        this.grid.setCell(r, c, -1); // Temporary stone
+        if (this.isBoardStillSolvable()) {
+            if (this.solve()) return true;
+        }
+        this.grid.setCell(r, c, 0); // Backtrack stone
 
         return false;
     }
 
-    fillSmallVoids() {
-        const cols = this.grid.cols;
-        const rows = this.grid.rows;
-
-        // Greedy Longest Path Filling
-        // For every empty cell, try to find the longest simple path we can form starting there.
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                if (!this.grid.isEmpty(r, c)) continue;
-
-                // Try to find the longest linear path possible in the current empty space
-                let path = this.findLongestPathFrom(r, c, 6); // Limit depth to keep it fast
-
-                if (path && path.length >= 3) {
-                    this.addTargetedPath(path);
-                }
+    findNextEmpty() {
+        for (let r = 0; r < this.grid.rows; r++) {
+            for (let c = 0; c < this.grid.cols; c++) {
+                if (this.grid.isEmpty(r, c)) return [r, c];
             }
         }
-
-        // Keep 2x2 L-shape checks as a fallback for clusters where DFS didn't find a long path
-        for (let r = 0; r < rows - 1; r++) {
-            for (let c = 0; c < cols - 1; c++) {
-                if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c)) {
-                    this.addTargetedPath([[r, c + 1], [r, c], [r + 1, c]]);
-                } else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c + 1)) {
-                    this.addTargetedPath([[r, c], [r, c + 1], [r + 1, c + 1]]);
-                } else if (this.grid.isEmpty(r, c) && this.grid.isEmpty(r + 1, c) && this.grid.isEmpty(r + 1, c + 1)) {
-                    this.addTargetedPath([[r, c], [r + 1, c], [r + 1, c + 1]]);
-                } else if (this.grid.isEmpty(r, c + 1) && this.grid.isEmpty(r + 1, c) && this.grid.isEmpty(r + 1, c + 1)) {
-                    this.addTargetedPath([[r, c + 1], [r + 1, c + 1], [r + 1, c]]);
-                }
-            }
-        }
-
+        return null;
     }
 
-    findLongestPathFrom(r, c, maxDepth) {
-        let bestPath = [];
+    findPossiblePaths(r, c) {
+        const paths = [];
+        // DFS search for potential paths starting at (r, c)
+        // We limit path length to prevent too much complexity
+        const maxPathLen = Math.min(10, Math.floor(Math.max(this.grid.cols, this.grid.rows) * 1.5));
 
-        const dfs = (currR, currC, visited, path) => {
-            if (path.length > bestPath.length) {
-                bestPath = [...path];
+        const dfs = (currR, currC, currentPath) => {
+            if (currentPath.length >= 3) {
+                // Potential path found. Check Hard Mode constraints.
+                const start = currentPath[0];
+                const end = currentPath[currentPath.length - 1];
+
+                let valid = true;
+                if (this.hardMode) {
+                    // Start and End must not be in same row or column
+                    if (start[0] === end[0] || start[1] === end[1]) valid = false;
+                }
+
+                if (valid) {
+                    paths.push([...currentPath]);
+                }
             }
-            if (path.length >= maxDepth) return;
+
+            if (currentPath.length >= maxPathLen) return;
 
             const neighbors = this.getNeighbors(currR, currC);
-            for (const [nr, nc] of neighbors) {
-                const key = `${nr},${nc}`;
-                if (this.grid.isEmpty(nr, nc) && !visited.has(key)) {
-                    // Self-Touch check: Ensure the new cell doesn't touch the path body (excluding the current tip)
-                    // This maintains "thin" paths.
-                    const samePathNeighbors = this.getNeighbors(nr, nc).filter(([tnr, tnc]) => {
-                        return visited.has(`${tnr},${tnc}`);
-                    });
+            // Randomize neighbor order
+            this.random.shuffle(neighbors);
 
-                    if (samePathNeighbors.length <= 1) {
-                        visited.add(key);
-                        path.push([nr, nc]);
-                        dfs(nr, nc, visited, path);
-                        path.pop();
-                        visited.delete(key);
+            for (const [nr, nc] of neighbors) {
+                if (this.grid.isEmpty(nr, nc) && !this.isInPath(nr, nc, currentPath)) {
+                    // Check for self-touching (maintain thin paths)
+                    if (this.countPathNeighbors(nr, nc, currentPath) === 1) {
+                        currentPath.push([nr, nc]);
+                        dfs(nr, nc, currentPath);
+                        currentPath.pop();
                     }
                 }
             }
         };
 
-        dfs(r, c, new Set([`${r},${c}`]), [[r, c]]);
-        return bestPath;
+        dfs(r, c, [[r, c]]);
+        // Only return a subset of paths to keep branching factor sane
+        return paths.slice(0, 15);
     }
 
-    addTargetedPath(points) {
-        if (!points.every(([r, c]) => this.grid.isEmpty(r, c))) return false;
-
-        const pathId = this.grid.paths.length + 1;
-        for (const [r, c] of points) {
-            this.grid.setCell(r, c, pathId);
-        }
-
-        this.grid.paths.push({
-            id: pathId,
-            points: points,
-            pointTypes: new Array(points.length).fill(0),
-            color: this.getDistinctColor(pathId),
-            isFiller: true
-        });
-        return true;
+    isInPath(r, c, path) {
+        return path.some(([pr, pc]) => pr === r && pc === c);
     }
 
-    mergeCollinearPaths() {
-        let changed = true;
-        while (changed) {
-            changed = false;
-            const paths = this.grid.paths;
-
-            // O(N^2) loop to find mergeable pairs
-            // We iterate backwards to safely splice if needed, or better, just restart on change
-            outerLoop:
-            for (let i = 0; i < paths.length; i++) {
-                for (let j = 0; j < paths.length; j++) {
-                    if (i === j) continue;
-
-                    const p1 = paths[i];
-                    const p2 = paths[j];
-
-                    // Check if p1 tail is connected to p2 head
-                    // or p1 tail to p2 tail
-                    // or p1 head to p2 head...
-
-                    // We only need to check one direction for p1 (Tail) against P2 (Head/Tail) 
-                    // because the loop will cover the other combinations when i/j swap or in next iters.
-                    // Actually, checking all 4 combos ensures we catch it now.
-
-                    const p1Start = p1.points[0];
-                    const p1End = p1.points[p1.points.length - 1];
-                    const p2Start = p2.points[0];
-                    const p2End = p2.points[p2.points.length - 1];
-
-                    // Helper to get direction vector
-                    const getDir = (a, b) => [b[0] - a[0], b[1] - a[1]];
-                    const isSameDir = (d1, d2) => d1[0] === d2[0] && d1[1] === d2[1];
-
-                    let merged = false;
-                    let mergedPoints = null;
-                    let mergedTypes = null;
-
-                    // Case 1: P1 End -> P2 Start
-                    if (this.areNeighbors(p1End[0], p1End[1], p2Start[0], p2Start[1])) {
-                        // Check collinearity
-                        // Dir of P1 last segment
-                        const d1 = getDir(p1.points[p1.points.length - 2], p1End);
-                        // Dir of connection
-                        const dConnect = getDir(p1End, p2Start);
-                        // Dir of P2 first segment
-                        const d2 = getDir(p2Start, p2.points[1]);
-
-                        if (isSameDir(d1, dConnect) && isSameDir(dConnect, d2)) {
-                            // MERGE: Append P2 to P1
-                            mergedPoints = p1.points.concat(p2.points);
-                            mergedTypes = p1.pointTypes.concat(p2.pointTypes);
-                            merged = true;
-                        }
-                    }
-                    // Case 2: P1 End -> P2 End (P2 reversed)
-                    else if (this.areNeighbors(p1End[0], p1End[1], p2End[0], p2End[1])) {
-                        const d1 = getDir(p1.points[p1.points.length - 2], p1End);
-                        const dConnect = getDir(p1End, p2End);
-                        const d2 = getDir(p2.points[p2.points.length - 1], p2.points[p2.points.length - 2]); // P2 backwards start
-
-                        if (isSameDir(d1, dConnect) && isSameDir(dConnect, d2)) {
-                            // MERGE: Append reversed P2 to P1
-                            const p2PointsRev = [...p2.points].reverse();
-                            const p2TypesRev = [...p2.pointTypes].reverse();
-                            mergedPoints = p1.points.concat(p2PointsRev);
-                            mergedTypes = p1.pointTypes.concat(p2TypesRev);
-                            merged = true;
-                        }
-                    }
-                    // We don't need to check P1 Start because P1 End of another path will catch it, or i/j swap.
-
-                    if (merged) {
-                        if (this.pathTouchesItself(mergedPoints)) {
-                            continue;
-                        }
-
-                        p1.points = mergedPoints;
-                        p1.pointTypes = mergedTypes;
-
-                        // Update grid cells for the consumed path P2
-                        for (const [r, c] of p2.points) {
-                            this.grid.setCell(r, c, p1.id);
-                        }
-                        // Remove P2 from paths
-                        paths.splice(j, 1);
-                        // Inherit filler status if either was filler? 
-                        // Or straight paths are allowed in hard mode if filler.
-                        // Ideally checking straightness later. 
-                        // But let's set isFiller = true to be safe for hard mode.
-                        p1.isFiller = true;
-
-                        changed = true;
-                        break outerLoop;
-                    }
-                }
-            }
-        }
-    }
-
-    shufflePathIds() {
-        const paths = this.grid.paths;
-        if (paths.length === 0) return;
-
-        // 1. Shuffle the paths array
-        this.random.shuffle(paths);
-
-        // 2. Re-assign IDs and update grid matrix
-        // Reset matrix first
-        for (let r = 0; r < this.grid.rows; r++) {
-            for (let c = 0; c < this.grid.cols; c++) {
-                this.grid.setCell(r, c, 0);
-            }
-        }
-
-        paths.forEach((path, index) => {
-            const newId = index + 1;
-            path.id = newId;
-            path.color = this.getDistinctColor(newId);
-
-            // Re-mark cells
-            for (const [r, c] of path.points) {
-                this.grid.setCell(r, c, newId);
-            }
-        });
-    }
-
-
-    expandPathsRandom(isExtension = false) {
-        let changed = true;
-        let iterations = 0;
-
-        // Loop until no more expansions are possible
-        // Increased limit for larger grids (20x20 = 400 cells)
-        while (changed && iterations < 1000) {
-            changed = false;
-            iterations++;
-            // Shuffle to vary the order of processing paths
-            this.random.shuffle(this.grid.paths);
-
-            for (const path of this.grid.paths) {
-                const prevPoints = path.points.map(([r, c]) => [r, c]);
-                const prevTypes = path.pointTypes.slice();
-                let changedLocal = false;
-
-                // Try expanding Start
-                if (this.expandEndpointRandom(path, 0, isExtension)) {
-                    changed = true;
-                    changedLocal = true;
-                }
-                // Try expanding End
-                if (this.expandEndpointRandom(path, path.points.length - 1, isExtension)) {
-                    changed = true;
-                    changedLocal = true;
-                }
-                if (changedLocal)
-                    this.tightenOnePath(path);
-
-                if (changedLocal && this.pathTouchesItself(path.points)) {
-                    // Revert and re-mark to avoid self-touching paths
-                    for (const [r, c] of path.points) {
-                        this.grid.setCell(r, c, 0);
-                    }
-                    path.points = prevPoints;
-                    path.pointTypes = prevTypes;
-                    for (const [r, c] of path.points) {
-                        this.grid.setCell(r, c, path.id);
-                    }
-                }
-            }
-        }
-    }
-
-    expandEndpointRandom(path, index, isExtension) {
-        // Get start position
-        const [r, c] = path.points[index];
-        const isStart = (index === 0);
-
-        const otherIdx = isStart ? path.points.length - 1 : 0;
-        const [otherR, otherC] = path.points[otherIdx];
-
-        // Determine CURRENT direction of the path at this endpoint
-        let prevDir = null;
-        let prevSegmentLength = 0;
-
-        if (path.points.length > 1) {
-            const [pr, pc] = isStart ? path.points[1] : path.points[path.points.length - 2];
-            prevDir = [r - pr, c - pc];
-
-            // Re-use helper to measure segment
-            prevSegmentLength = this.measureStraightSegment(path, index, prevDir);
-        }
-
-        // 1. Find all valid empty neighbors
-        let neighbors = this.getNeighbors(r, c).filter(([nr, nc]) => this.grid.isEmpty(nr, nc));
-
-        if (neighbors.length === 0) return false;
-
-        // 2. Random Selection Loop
-        // "if the first selected is not valid... try other options"
-        this.random.shuffle(neighbors);
-
-        for (const [nr, nc] of neighbors) {
-            // Check Constraint 1: Don't touch other endpoint
-            // Relax this rule for extensions (Phase 4+) to avoid sub-optimal "spare loops"
-            if (!isExtension && this.areNeighbors(nr, nc, otherR, otherC)) {
-                // console.log(`[SKIP] Color: ${path.color}, Pos: (${r},${c}), Neighbor: (${nr},${nc}) - Would touch other endpoint`);
-                continue;
-            }
-
-            // Check Constraint 1.5: Hard Mode (Endpoints must never share row/col)
-            if (this.hardMode && (nr === otherR || nc === otherC)) {
-                continue;
-            }
-
-            // Check Constraint 2: No U-Shaped Turns
-            if (prevDir && prevSegmentLength < 2 && path.points.length >= 3) {
-                const newDir = [nr - r, nc - c];
-
-                let dirBeforePrev = null;
-                if (isStart && path.points.length >= 3) {
-                    const p1 = path.points[1];
-                    const p2 = path.points[2];
-                    dirBeforePrev = [p1[0] - p2[0], p1[1] - p2[1]];
-                } else if (!isStart && path.points.length >= 3) {
-                    const pN1 = path.points[path.points.length - 2];
-                    const pN2 = path.points[path.points.length - 3];
-                    dirBeforePrev = [pN1[0] - pN2[0], pN1[1] - pN2[1]];
-                }
-
-                if (dirBeforePrev) {
-                    const dirBeforePrevCode = this.findTurnCode(dirBeforePrev);
-                    const newDirCode = this.findTurnCode(newDir);
-                    if (this.isUTurnDisallowed(dirBeforePrevCode, prevSegmentLength, newDirCode, 2)) {
-                        continue;
-                    }
-                }
-            }
-
-            // Check Constraint 3: Self-Touch
-            const samePathNeighbors = this.getNeighbors(nr, nc).filter(([tr, tc]) => {
-                return this.grid.cells[tr][tc] === path.id;
-            });
-
-            if (samePathNeighbors.length > 1) {
-                continue;
-            }
-
-            // If we got here, this neighbor is valid. Execute.
-            let currR = nr;
-            let currC = nc;
-
-            const type = isExtension ? 1 : 0;
-
-            this.grid.setCell(currR, currC, path.id);
-
-            if (isStart) {
-                path.points.unshift([currR, currC]);
-                path.pointTypes.unshift(type);
-            } else {
-                path.points.push([currR, currC]);
-                path.pointTypes.push(type);
-            }
-
-            return true; // Made a move, exit
-        }
-
-        // No valid neighbors found
-        return false;
-    }
-
-    measureStraightSegment(path, index, tipDir) {
-        const isStart = (index === 0);
+    countPathNeighbors(r, c, path) {
         let count = 0;
-
-        if (isStart) {
-            for (let i = 0; i < path.points.length - 1; i++) {
-                const curr = path.points[i];
-                const next = path.points[i + 1];
-                if (curr[0] - next[0] === tipDir[0] && curr[1] - next[1] === tipDir[1]) {
-                    count++;
-                } else {
-                    break;
-                }
-            }
-        } else {
-            for (let i = path.points.length - 1; i > 0; i--) {
-                const curr = path.points[i];
-                const prev = path.points[i - 1];
-                if (curr[0] - prev[0] === tipDir[0] && curr[1] - prev[1] === tipDir[1]) {
-                    count++;
-                } else {
-                    break;
-                }
-            }
+        const neighbors = this.getNeighbors(r, c);
+        for (const [nr, nc] of neighbors) {
+            if (this.isInPath(nr, nc, path)) count++;
         }
         return count;
     }
 
-    areNeighbors(r1, c1, r2, c2) {
-        return Math.abs(r1 - r2) + Math.abs(c1 - c2) === 1;
+    getNeighbors(r, c) {
+        const res = [];
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        for (const [dr, dc] of dirs) {
+            const nr = r + dr, nc = c + dc;
+            if (this.grid.isValid(nr, nc)) res.push([nr, nc]);
+        }
+        return res;
+    }
+
+    isBoardStillSolvable() {
+        // Check for isolated empty cells (no empty neighbors)
+        for (let r = 0; r < this.grid.rows; r++) {
+            for (let c = 0; c < this.grid.cols; c++) {
+                if (this.grid.isEmpty(r, c)) {
+                    const neighbors = this.getNeighbors(r, c);
+                    const emptyNeighbors = neighbors.filter(([nr, nc]) => this.grid.isEmpty(nr, nc));
+                    if (emptyNeighbors.length === 0) return false;
+                }
+            }
+        }
+        return true;
     }
 
     getDistinctColor(index) {
@@ -645,171 +181,25 @@ export class Generator {
         return `hsl(${hue}, 85%, 60%)`;
     }
 
-    getEmptyNeighborCount(r, c) {
-        let count = 0;
-        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-        for (const [dr, dc] of dirs) {
-            const nr = r + dr, nc = c + dc;
-            if (this.grid.isValid(nr, nc) && this.grid.cells[nr][nc] === 0) count++;
-        }
-        return count;
-    }
+    shufflePathIds() {
+        const paths = this.grid.paths;
+        this.random.shuffle(paths);
 
-    getAllEmpty() {
-        const res = [];
+        // Re-calculate grid matrix based on new order
         for (let r = 0; r < this.grid.rows; r++) {
             for (let c = 0; c < this.grid.cols; c++) {
-                if (this.grid.isEmpty(r, c)) res.push([r, c]);
-            }
-        }
-        return res;
-    }
-
-    findTurnCode(dir) {
-
-        if (dir[0] === -1 && dir[1] === 0) return 1; // up
-        if (dir[0] === 1 && dir[1] === 0) return 2;  // down
-        if (dir[0] === 0 && dir[1] === -1) return 3; // left
-        if (dir[0] === 0 && dir[1] === 1) return 4;  // right
-        return 0;
-
-    }
-
-    isUTurnDisallowed(prevDirCode, runLength, newDirCode, minStraightCells) {
-        if (!prevDirCode || !newDirCode) return false;
-        const isOpposite =
-            (prevDirCode === 1 && newDirCode === 2) ||
-            (prevDirCode === 2 && newDirCode === 1) ||
-            (prevDirCode === 3 && newDirCode === 4) ||
-            (prevDirCode === 4 && newDirCode === 3);
-        return isOpposite && runLength < minStraightCells;
-    }
-
-    makeStateKey(r, c, dir, run) {
-        return `${r},${c}|${dir ?? 'none'}|${run}`;
-    }
-
-    wouldTouchSelf(nr, nc, currKey, parents) {
-        let checkKey = currKey;
-        let skipFirst = true;
-        while (checkKey) {
-            const [pos] = checkKey.split("|");
-            const [ar, ac] = pos.split(",").map(Number);
-            if (skipFirst) {
-                skipFirst = false;
-            } else if (this.areNeighbors(nr, nc, ar, ac)) {
-                return true;
-            }
-            const parent = parents.get(checkKey);
-            if (!parent) break;
-            checkKey = this.makeStateKey(parent.r, parent.c, parent.dir, parent.run);
-        }
-        return false;
-    }
-
-    pathTouchesItself(points) {
-        for (let i = 0; i < points.length; i++) {
-            const [r1, c1] = points[i];
-            for (let j = 0; j < i - 1; j++) {
-                const [r2, c2] = points[j];
-                if (r1 === r2 && c1 === c2) return true;
-                if (this.areNeighbors(r1, c1, r2, c2)) return true;
-            }
-        }
-        return false;
-    }
-
-    findShortestPath(start, end) {
-        const [startR, startC] = start;
-        const [endR, endC] = end;
-
-        const q = [{ r: startR, c: startC, dir: null, run: 0 }];
-        const parents = new Map();
-        const startKey = this.makeStateKey(startR, startC, null, 0);
-        parents.set(startKey, null);
-        let found = false;
-        let foundKey = null;
-
-        while (q.length > 0) {
-            const { r, c, dir, run } = q.shift();
-            const currKey = this.makeStateKey(r, c, dir, run);
-
-            if (r === endR && c === endC) {
-                found = true;
-                foundKey = currKey;
-                break;
-            }
-
-            const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-
-            for (const [dr, dc] of dirs) {
-                const newDir = this.findTurnCode([dr, dc]);
-
-                // Prevent short U-turns: only allow reversing direction
-                // if the straight segment length is >= 5 cells.
-                if (dir !== null) {
-                    if (this.isUTurnDisallowed(dir, run, newDir, 5)) {
-                        continue;
-                    }
-                }
-
-                const nr = r + dr, nc = c + dc;
-
-                if (this.grid.isValid(nr, nc)) {
-                    if (this.grid.cells[nr][nc] !== 0 && !(nr === endR && nc === endC)) {
-                        continue;
-                    }
-
-                    const newRun = (dir === newDir) ? run + 1 : 1;
-                    const maxDim = (newDir === 1 || newDir === 2) ? this.grid.rows : this.grid.cols;
-                    const maxStraight = Math.floor(maxDim * 1 / 3);
-                    if (newRun > maxStraight) {
-                        continue;
-                    }
-                    const stateKey = this.makeStateKey(nr, nc, newDir, newRun);
-
-                    if (parents.has(stateKey)) {
-                        continue;
-                    }
-
-                    if (this.wouldTouchSelf(nr, nc, currKey, parents)) {
-                        continue;
-                    }
-
-                    if (this.grid.isValid(nr, nc)) {
-                        if (this.grid.cells[nr][nc] === 0 || (nr === endR && nc === endC)) {
-                            parents.set(stateKey, { r, c, dir, run });
-                            q.push({ r: nr, c: nc, dir: newDir, run: newRun });
-                        }
-                    }
-                }
+                const val = this.grid.cells[r][c];
+                if (val > 0) this.grid.cells[r][c] = 0;
             }
         }
 
-        if (!found) return null;
-
-        const path = [];
-        let currKey = foundKey;
-        while (currKey) {
-            const [pos] = currKey.split("|");
-            const [cr, cc] = pos.split(",").map(Number);
-            path.push([cr, cc]);
-            const parent = parents.get(currKey);
-            if (!parent) break;
-            currKey = this.makeStateKey(parent.r, parent.c, parent.dir, parent.run);
-        }
-        return path.reverse();
-    }
-
-    getNeighbors(r, c) {
-        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-        const res = [];
-        for (const [dr, dc] of dirs) {
-            const nr = r + dr, nc = c + dc;
-            if (this.grid.isValid(nr, nc)) {
-                res.push([nr, nc]);
+        paths.forEach((path, i) => {
+            const newId = i + 1;
+            path.id = newId;
+            path.color = this.getDistinctColor(newId);
+            for (const [r, c] of path.points) {
+                this.grid.setCell(r, c, newId);
             }
-        }
-        return res;
+        });
     }
 }

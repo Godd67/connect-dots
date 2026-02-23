@@ -41,22 +41,27 @@ const Settings = {
   },
 
   load() {
-    const saved = localStorage.getItem('dots-settings');
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem('dots-settings');
+      if (saved) {
         this.data = { ...this.data, ...JSON.parse(saved) };
-      } catch (e) {
-        console.error("Failed to parse settings", e);
+      } else {
+        // Default based on device
+        this.data.aspectRatio = isMobile() ? '9:16' : '1:1';
       }
-    } else {
-      // Default based on device
+    } catch (e) {
+      console.warn("Storage access denied or failed", e);
       this.data.aspectRatio = isMobile() ? '9:16' : '1:1';
     }
     this.applyToUI();
   },
 
   save() {
-    localStorage.setItem('dots-settings', JSON.stringify(this.data));
+    try {
+      localStorage.setItem('dots-settings', JSON.stringify(this.data));
+    } catch (e) {
+      console.warn("Storage access denied or failed", e);
+    }
   },
 
   applyToUI() {

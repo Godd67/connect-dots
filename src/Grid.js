@@ -1,9 +1,9 @@
 export class Grid {
     constructor(cols, rows) {
         this.cols = cols;
-        this.rows = rows;
+        this.rows = rows || cols;
         // 0: empty, >0: path id
-        this.cells = Array.from({ length: rows }, () => Array(cols).fill(0));
+        this.cells = Array.from({ length: this.rows }, () => Array(this.cols).fill(0));
         this.paths = []; // { id, color, points: [[r,c], ...] }
     }
 
