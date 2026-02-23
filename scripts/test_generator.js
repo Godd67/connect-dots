@@ -1,10 +1,12 @@
 import { Grid } from '../src/Grid.js';
 import { Generator } from '../src/Generator.js';
+import { Random } from '../src/Random.js';
 
 function testGenerator(size, runs = 10) {
     console.log(`Testing ${size}x${size} Generator (${runs} runs)...`);
     const grid = new Grid(size);
-    const generator = new Generator(grid);
+    const random = new Random("TEST_SEED");
+    const generator = new Generator(grid, { random });
     let successCount = 0;
     let totalPairs = 0;
 
