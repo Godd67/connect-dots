@@ -1026,11 +1026,9 @@ function checkEdgeScroll(touch) {
           const dx = edgeScroll.dx;
           const dy = edgeScroll.dy;
 
-          window.scrollBy(dx, dy);
-          document.documentElement.scrollLeft += dx;
-          document.documentElement.scrollTop += dy;
-          document.body.scrollLeft += dx;
-          document.body.scrollTop += dy;
+          const curX = window.scrollX || document.documentElement.scrollLeft;
+          const curY = window.scrollY || document.documentElement.scrollTop;
+          window.scrollTo(curX + dx, curY + dy);
 
           if (canvasContainer) {
             canvasContainer.scrollLeft += dx;
