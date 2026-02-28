@@ -185,6 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
+  console.log("Connect The Dots - v1.1.2 Initialized");
   generateBtn.addEventListener('click', () => {
     // If user has not changed the seed input manually, randomize it.
     // This allows "New" to truly feel like a new level every time.
@@ -373,7 +374,7 @@ function init() {
   const buildInfoEl = document.getElementById('build-info');
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.0-${buildNum}`;
+    buildInfoEl.textContent = `v1.1.2-${buildNum}`;
   }
 
   // Initial generation
@@ -968,7 +969,7 @@ function drawDot(r, c, color, pathId) {
 const EDGE_ZONE = 80;       // px from viewport edge that triggers scroll
 const MAX_SCROLL_SPEED = 15; // px per animation frame at the extreme edge
 
-const edgeScroll = { rafId: null, dx: 0, dy: 0 };
+const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
 
 function checkEdgeScroll(touch) {
   const vw = window.innerWidth;
@@ -997,6 +998,8 @@ function checkEdgeScroll(touch) {
   edgeScroll.dy = dy;
 
   if (dx !== 0 || dy !== 0) {
+    if (!edgeScroll.active) console.log("Edge Scroll Start:", dx, dy);
+    edgeScroll.active = true;
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
@@ -1017,6 +1020,7 @@ function checkEdgeScroll(touch) {
 function stopEdgeScroll() {
   edgeScroll.dx = 0;
   edgeScroll.dy = 0;
+  edgeScroll.active = false;
   if (edgeScroll.rafId) {
     cancelAnimationFrame(edgeScroll.rafId);
     edgeScroll.rafId = null;
