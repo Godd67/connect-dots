@@ -1051,6 +1051,7 @@ function checkEdgeScroll(touch) {
 }
 
 function updateDebugLog(x, y, vw, vh, dx, dy) {
+  if (!SHOW_DEBUG) return;
   let log = document.getElementById('debug-log');
   if (!log) {
     log = document.createElement('div');
@@ -1083,6 +1084,7 @@ function updateDebugLog(x, y, vw, vh, dx, dy) {
 }
 
 function updateDebugDot(x, y) {
+  if (!SHOW_DEBUG) return;
   let dot = document.getElementById('debug-dot');
   if (!dot) {
     dot = document.createElement('div');
