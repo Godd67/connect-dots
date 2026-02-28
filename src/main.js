@@ -185,7 +185,20 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.4 Initialized");
+  console.log("Connect The Dots - v1.1.5 Initialized");
+
+  // Cache Control: Clear SW and reload if user clicks the version/update link
+  const buildInfoEl = document.getElementById('build-info');
+  if (buildInfoEl) {
+    buildInfoEl.style.cursor = 'pointer';
+    buildInfoEl.style.textDecoration = 'underline';
+    buildInfoEl.addEventListener('click', () => {
+      if (confirm("Force update? This will clear the cache and reload the page.")) {
+        forceUpdate();
+      }
+    });
+  }
+
   generateBtn.addEventListener('click', () => {
     // If user has not changed the seed input manually, randomize it.
     // This allows "New" to truly feel like a new level every time.
@@ -370,11 +383,10 @@ function init() {
   window.addEventListener('touchend', (e) => { handlePointerUp(e); stopEdgeScroll(); });
   window.addEventListener('touchcancel', (e) => { handlePointerUp(e); stopEdgeScroll(); });
 
-  // Populate build info
-  const buildInfoEl = document.getElementById('build-info');
+  // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.4-${buildNum}`;
+    buildInfoEl.textContent = `v1.1.5-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -966,15 +978,19 @@ function drawDot(r, c, color, pathId) {
 // automatically scroll the canvas container so the user can
 // reach dots that are off-screen without lifting their finger.
 // ──────────────────────────────────────────────────────────
-const EDGE_ZONE = 80;       // px from viewport edge that triggers scroll
-const MAX_SCROLL_SPEED = 15; // px per animation frame at the extreme edge
+const EDGE_ZONE = 100;      // Increased for better sensitivity (v1.1.5)
+const MAX_SCROLL_SPEED = 18; // px per animation frame
 
 const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
 
 function checkEdgeScroll(touch) {
-  // Use clientX/Y which are relative to the viewport
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  // Use visualViewport if available for better mobile accuracy
+  const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const vx = window.visualViewport ? window.visualViewport.offsetLeft : 0;
+  const vy = window.visualViewport ? window.visualViewport.offsetTop : 0;
+
+  // clientX/Y are relative to the visual viewport
   const x = touch.clientX;
   const y = touch.clientY;
 
@@ -998,15 +1014,18 @@ function checkEdgeScroll(touch) {
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
 
-  // Visual feedback: brief color pulse on the screen edge if scrolling
+  // Debug: Small dot where the finger is
+  updateDebugDot(x, y);
+
   if (dx !== 0 || dy !== 0) {
     showEdgeIndicator(dx, dy);
-    if (!edgeScroll.active) console.log("Edge Scroll Start:", dx.toFixed(1), dy.toFixed(1));
+    if (!edgeScroll.active) console.log("Edge Scroll Triggered:", dx.toFixed(1), dy.toFixed(1));
     edgeScroll.active = true;
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
           window.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          // Also try to scroll container as fallback
           if (canvasContainer) canvasContainer.scrollBy(edgeScroll.dx, edgeScroll.dy);
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
@@ -1017,6 +1036,30 @@ function checkEdgeScroll(touch) {
     }
   } else {
     stopEdgeScroll();
+  }
+}
+
+function updateDebugDot(x, y) {
+  let dot = document.getElementById('debug-dot');
+  if (!dot) {
+    dot = document.createElement('div');
+    dot.id = 'debug-dot';
+    dot.style.position = 'fixed';
+    dot.style.width = '10px';
+    dot.style.height = '10px';
+    dot.style.background = 'red';
+    dot.style.borderRadius = '50%';
+    dot.style.pointerEvents = 'none';
+    dot.style.zIndex = '10000';
+    dot.style.display = 'none';
+    document.body.appendChild(dot);
+  }
+  if (isDrawing) {
+    dot.style.display = 'block';
+    dot.style.left = (x - 5) + 'px';
+    dot.style.top = (y - 5) + 'px';
+  } else {
+    dot.style.display = 'none';
   }
 }
 
@@ -1032,17 +1075,17 @@ function showEdgeIndicator(dx, dy) {
     indicator.style.height = '100vh';
     indicator.style.pointerEvents = 'none';
     indicator.style.zIndex = '9999';
-    indicator.style.transition = 'box-shadow 0.2s';
+    indicator.style.transition = 'box-shadow 0.1s';
     document.body.appendChild(indicator);
   }
 
   let shadow = '';
-  const color = 'rgba(100, 108, 255, 0.3)';
-  const size = '40px';
-  if (dy < 0) shadow += `inset 0 ${size} ${size} -${size} ${color}, `; // Top
-  if (dy > 0) shadow += `inset 0 -${size} ${size} -${size} ${color}, `; // Bottom
-  if (dx < 0) shadow += `inset ${size} 0 ${size} -${size} ${color}, `; // Left
-  if (dx > 0) shadow += `inset -${size} 0 ${size} -${size} ${color}, `; // Right
+  const color = 'rgba(64, 156, 255, 0.5)'; // Brighter blue
+  const size = '50px';
+  if (dy < 0) shadow += `inset 0 ${size} ${size} -${size} ${color}, `;
+  if (dy > 0) shadow += `inset 0 -${size} ${size} -${size} ${color}, `;
+  if (dx < 0) shadow += `inset ${size} 0 ${size} -${size} ${color}, `;
+  if (dx > 0) shadow += `inset -${size} 0 ${size} -${size} ${color}, `;
 
   indicator.style.boxShadow = shadow.trim().replace(/,$/, '');
 }
@@ -1053,33 +1096,30 @@ function stopEdgeScroll() {
   edgeScroll.active = false;
   const indicator = document.getElementById('edge-indicator');
   if (indicator) indicator.style.boxShadow = 'none';
+  const dot = document.getElementById('debug-dot');
+  if (dot) dot.style.display = 'none';
+
   if (edgeScroll.rafId) {
     cancelAnimationFrame(edgeScroll.rafId);
     edgeScroll.rafId = null;
   }
 }
 
-// Service Worker handling
-if ('serviceWorker' in navigator) {
-  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
-  if (isLocal) {
-    // On localhost: unregister any old SW so Vite's live code is always served fresh
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      if (registrations.length > 0) {
-        Promise.all(registrations.map(r => r.unregister())).then(() => {
-          console.log('Dev mode: unregistered old Service Worker(s), reloading...');
-          location.reload();
-        });
+async function forceUpdate() {
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    for (const registration of registrations) {
+      await registration.unregister();
+    }
+    if (typeof caches !== 'undefined') {
+      const keys = await caches.keys();
+      for (const key of keys) {
+        await caches.delete(key);
       }
-    });
+    }
+    window.location.reload(true);
   } else {
-    // Production: register/update SW normally
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('SW registered, scope:', reg.scope))
-        .catch(err => console.log('SW registration failed:', err));
-    });
+    window.location.reload(true);
   }
 }
 
