@@ -96,7 +96,8 @@ let seedDirty = false; // Track if user edited the seed input
 
 // Rendering constants
 const DEFAULT_CELL_SIZE = 50;
-const DOT_RADIUS_RATIO = 0.38; // Increased from 0.32 to fit numbers better
+const MIN_CELL_SIZE = 36; // Ensure grid can overflow for scrolling (v1.1.12)
+const DOT_RADIUS_RATIO = 0.38;
 const PADDING = 20;
 
 const dpr = window.devicePixelRatio || 1;
@@ -181,11 +182,12 @@ function calculateCellSize(cols, rows) {
 
   const cellW = Math.floor(maxWidth / cols);
   const cellH = Math.floor(maxHeight / rows);
-  return Math.min(cellW, cellH, DEFAULT_CELL_SIZE);
+  const bestFit = Math.min(cellW, cellH);
+  return Math.max(MIN_CELL_SIZE, Math.min(bestFit, DEFAULT_CELL_SIZE));
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.11 Initialized");
+  console.log("Connect The Dots - v1.1.12 Initialized");
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -389,7 +391,7 @@ function init() {
   // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.11-${buildNum} (Tap to Update)`;
+    buildInfoEl.textContent = `v1.1.12-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -1074,11 +1076,13 @@ function updateDebugLog(x, y, vw, vh, dx, dy) {
   const cScX = canvasContainer ? canvasContainer.scrollLeft : 0;
   const cScY = canvasContainer ? canvasContainer.scrollTop : 0;
 
-  log.innerHTML = `V: 1.1.11 | Draw: ${isDrawing}<br>
+  const vv = window.visualViewport;
+  log.innerHTML = `V: 1.1.12 | Draw: ${isDrawing}<br>
                    Touch: ${Math.round(x)}, ${Math.round(y)}<br>
                    WinScroll: ${Math.round(scX)}, ${Math.round(scY)}<br>
                    ContScroll: ${Math.round(cScX)}, ${Math.round(cScY)}<br>
                    Dims: ${canvasContainer ? canvasContainer.scrollWidth : 0} / ${canvasContainer ? canvasContainer.clientWidth : 0}<br>
+                   Scale: ${vv ? vv.scale.toFixed(2) : 1.0}<br>
                    Speed: ${dx.toFixed(1)}, ${dy.toFixed(1)}`;
 }
 
