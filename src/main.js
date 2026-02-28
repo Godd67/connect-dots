@@ -965,14 +965,12 @@ function drawDot(r, c, color, pathId) {
 // automatically scroll the canvas container so the user can
 // reach dots that are off-screen without lifting their finger.
 // ──────────────────────────────────────────────────────────
-const EDGE_ZONE = 60;       // px from viewport edge that triggers scroll
-const MAX_SCROLL_SPEED = 12; // px per animation frame at the extreme edge
+const EDGE_ZONE = 80;       // px from viewport edge that triggers scroll
+const MAX_SCROLL_SPEED = 15; // px per animation frame at the extreme edge
 
 const edgeScroll = { rafId: null, dx: 0, dy: 0 };
 
 function checkEdgeScroll(touch) {
-  if (!canvasContainer) return;
-
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const x = touch.clientX;
@@ -1002,7 +1000,8 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          canvasContainer.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          window.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          if (canvasContainer) canvasContainer.scrollBy(edgeScroll.dx, edgeScroll.dy);
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
