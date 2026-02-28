@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.2 Initialized");
+  console.log("Connect The Dots - v1.1.3 Initialized");
   generateBtn.addEventListener('click', () => {
     // If user has not changed the seed input manually, randomize it.
     // This allows "New" to truly feel like a new level every time.
@@ -374,7 +374,7 @@ function init() {
   const buildInfoEl = document.getElementById('build-info');
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.2-${buildNum}`;
+    buildInfoEl.textContent = `v1.1.3-${buildNum}`;
   }
 
   // Initial generation
