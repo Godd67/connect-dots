@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.7 Initialized");
+  console.log("Connect The Dots - v1.1.8 Initialized");
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -386,7 +386,7 @@ function init() {
   // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.7-${buildNum} (Tap to Update)`;
+    buildInfoEl.textContent = `v1.1.8-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -1023,9 +1023,21 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          // Scroll both window and container to be safe
-          window.scrollBy(edgeScroll.dx, edgeScroll.dy);
-          if (canvasContainer) canvasContainer.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          // Force scroll on all possible targets
+          const dx = edgeScroll.dx;
+          const dy = edgeScroll.dy;
+
+          window.scrollBy(dx, dy);
+          document.documentElement.scrollLeft += dx;
+          document.documentElement.scrollTop += dy;
+          document.body.scrollLeft += dx;
+          document.body.scrollTop += dy;
+
+          if (canvasContainer) {
+            canvasContainer.scrollLeft += dx;
+            canvasContainer.scrollTop += dy;
+          }
+
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
@@ -1055,10 +1067,16 @@ function updateDebugLog(x, y, vw, vh, dx, dy) {
     log.style.pointerEvents = 'none';
     document.body.appendChild(log);
   }
-  log.innerHTML = `V: 1.1.7 | Draw: ${isDrawing}<br>
+  const scX = window.scrollX || document.documentElement.scrollLeft;
+  const scY = window.scrollY || document.documentElement.scrollTop;
+  const cScX = canvasContainer ? canvasContainer.scrollLeft : 0;
+  const cScY = canvasContainer ? canvasContainer.scrollTop : 0;
+
+  log.innerHTML = `V: 1.1.8 | Draw: ${isDrawing}<br>
                    Touch: ${Math.round(x)}, ${Math.round(y)}<br>
-                   View: ${vw}x${vh}<br>
-                   Scroll: ${dx.toFixed(1)}, ${dy.toFixed(1)}`;
+                   WinScroll: ${Math.round(scX)}, ${Math.round(scY)}<br>
+                   ContScroll: ${Math.round(cScX)}, ${Math.round(cScY)}<br>
+                   Speed: ${dx.toFixed(1)}, ${dy.toFixed(1)}`;
 }
 
 function updateDebugDot(x, y) {
