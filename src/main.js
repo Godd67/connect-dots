@@ -1,6 +1,7 @@
 import { Grid } from './Grid.js';
 import { Generator } from './Generator.js';
 import { Random } from './Random.js';
+const SHOW_DEBUG = import.meta.env.VITE_SHOW_DEBUG === 'true';
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
@@ -377,16 +378,13 @@ function init() {
     if (isDrawing) {
       if (e.cancelable) e.preventDefault();
       handlePointerMove(touch);
-      checkEdgeScroll(touch);
-    } else {
-      stopEdgeScroll();
     }
   };
 
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
-  window.addEventListener('touchend', (e) => { handlePointerUp(e); stopEdgeScroll(); });
-  window.addEventListener('touchcancel', (e) => { handlePointerUp(e); stopEdgeScroll(); });
+  window.addEventListener('touchend', (e) => { handlePointerUp(e); });
+  window.addEventListener('touchcancel', (e) => { handlePointerUp(e); });
 
   // Populate build info version number
   if (buildInfoEl) {
@@ -481,6 +479,9 @@ function handlePointerMove(e) {
   if (!isDrawing || !activePathId) return;
 
   const cell = getCellFromCoords(e.clientX, e.clientY);
+  if (isDrawing) {
+    checkEdgeScroll(e);
+  }
   if (!cell) return;
 
   const [r, c] = cell;
@@ -588,6 +589,7 @@ function handlePointerUp() {
   isDrawing = false;
   activePathId = null;
   lastCell = null;
+  stopEdgeScroll();
 }
 
 function checkWin() {
@@ -1014,9 +1016,10 @@ function checkEdgeScroll(touch) {
 
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
-
-  updateDebugDot(x, y);
-  updateDebugLog(x, y, vw, vh, dx, dy);
+  if (SHOW_DEBUG) {
+    updateDebugDot(x, y);
+    updateDebugLog(x, y, vw, vh, dx, dy);
+  }
 
   if (dx !== 0 || dy !== 0) {
     showEdgeIndicator(dx, dy);
@@ -1135,8 +1138,12 @@ function stopEdgeScroll() {
   canvas.style.touchAction = 'auto'; // Restore native scroll Header/
   const indicator = document.getElementById('edge-indicator');
   if (indicator) indicator.style.boxShadow = 'none';
-  const dot = document.getElementById('debug-dot');
-  if (dot) dot.style.display = 'none';
+  if (SHOW_DEBUG) {
+    const dot = document.getElementById('debug-dot');
+    if (dot) dot.style.display = 'none';
+    const log = document.getElementById('debug-log');
+    if (log) log.style.display = 'none';
+  }
 
   if (edgeScroll.rafId) {
     cancelAnimationFrame(edgeScroll.rafId);
