@@ -359,8 +359,11 @@ canvas {
   align-items: center;
   margin: 20px auto;
   max-width: 100%;
-  overflow: visible;
-  /* Prevent scrollbars from stealing gestures */
+  overflow: auto;
+  /* Allow scroll when content is larger than viewport */
+  -webkit-overflow-scrolling: touch;
+  /* Smooth momentum scroll on iOS */
+  scroll-behavior: smooth;
 }
 
 .bottom-controls {
@@ -442,8 +445,16 @@ footer p {
 
 
   canvas {
-    max-width: 100%;
-    height: auto !important;
+    max-width: none;
+    /* Allow canvas to overflow for scrollable container */
+  }
+
+  .canvas-container {
+    justify-content: flex-start;
+    /* Align canvas to the start for scroll */
+    align-items: flex-start;
+    max-height: 65vh;
+    /* Limit visible area to leave room for controls */
   }
 }
 
@@ -582,4 +593,28 @@ footer p {
   margin-bottom: 4px;
   border-bottom: 1px solid #333;
   padding-bottom: 2px;
+}
+
+/* Toast notification */
+#toast-msg {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(30, 30, 30, 0.92);
+  color: #f0f0f0;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 9999;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+#toast-msg.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }

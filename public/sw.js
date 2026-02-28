@@ -1,4 +1,4 @@
-const CACHE_NAME = 'connect-dots-v8';
+const CACHE_NAME = 'connect-dots-v11';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -74,6 +74,8 @@ self.addEventListener('fetch', (event) => {
                     if (event.request.mode === 'navigate') {
                         return caches.match('./index.html');
                     }
+                    // For non-navigation non-cached requests, return a 503
+                    return new Response('Service Unavailable', { status: 503 });
                 });
             })
     );

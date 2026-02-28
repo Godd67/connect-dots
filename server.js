@@ -52,12 +52,13 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/getPuzzle', auth, (req, res) => {
-    const size = parseInt(req.query.size);
+    const cols = parseInt(req.query.cols || req.query.size);
+    const rows = parseInt(req.query.rows || cols);
     const modeStr = req.query.mode || 'normal';
 
     // Validation
-    if (isNaN(size) || size < 5 || size > 20) {
-        return res.status(400).json({ error: 'Invalid size. Must be between 5 and 20.' });
+    if (isNaN(cols) || cols < 5 || cols > 20 || isNaN(rows) || rows < 5 || rows > 35) {
+        return res.status(400).json({ error: 'Invalid dimensions. Cols [5-20], Rows [5-35].' });
     }
     if (modeStr !== 'normal' && modeStr !== 'hard') {
         return res.status(400).json({ error: 'Invalid mode. Must be "normal" or "hard".' });
@@ -66,7 +67,7 @@ app.get('/api/getPuzzle', auth, (req, res) => {
     const mode = modeStr === 'hard';
     const seed = req.seed; // Use the seed from traceability middleware
 
-    const grid = new Grid(size);
+    const grid = new Grid(cols, rows);
     const random = new Random(seed);
     const generator = new Generator(grid, {
         hardMode: mode,
@@ -82,8 +83,8 @@ app.get('/api/getPuzzle', auth, (req, res) => {
         }));
 
         const stones = [];
-        for (let r = 0; r < grid.size; r++) {
-            for (let c = 0; c < grid.size; c++) {
+        for (let r = 0; r < grid.rows; r++) {
+            for (let c = 0; c < grid.cols; c++) {
                 if (grid.cells[r][c] === 0) {
                     stones.push([r, c]);
                 }
@@ -91,7 +92,8 @@ app.get('/api/getPuzzle', auth, (req, res) => {
         }
 
         res.json({
-            size,
+            cols,
+            rows,
             mode: mode ? 'hard' : 'normal',
             seed,
             dotPairs,
@@ -103,27 +105,28 @@ app.get('/api/getPuzzle', auth, (req, res) => {
 });
 
 app.post('/api/validatePuzzle', auth, (req, res) => {
-    const { size, paths, stones: userStones } = req.body;
+    const cols = parseInt(req.body.cols || req.body.size);
+    const rows = parseInt(req.body.rows || cols);
     const seed = req.seed;
 
-    if (size === undefined || paths === undefined) {
-        return res.status(400).json({ error: 'Missing size or paths', seed });
+    if (!cols || !paths) {
+        return res.status(400).json({ error: 'Missing size/cols or paths', seed });
     }
 
-    if (isNaN(size) || size < 5 || size > 20) {
-        return res.status(400).json({ error: 'Invalid size. Must be between 5 and 20.', seed });
+    if (isNaN(cols) || cols < 5 || cols > 20 || isNaN(rows) || rows < 5 || rows > 35) {
+        return res.status(400).json({ error: 'Invalid dimensions.', seed });
     }
 
     // Verify paths against the seed (re-generate the grid)
-    const gridRef = new Grid(size);
+    const gridRef = new Grid(cols, rows);
     const randomRef = new Random(seed);
     const generatorRef = new Generator(gridRef, { hardMode: false, random: randomRef });
     generatorRef.generate();
 
     const stones = userStones || [];
     if (!userStones) {
-        for (let r = 0; r < size; r++) {
-            for (let c = 0; c < size; c++) {
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
                 if (gridRef.cells[r][c] === 0) stones.push([r, c]);
             }
         }
@@ -132,8 +135,8 @@ app.post('/api/validatePuzzle', auth, (req, res) => {
     // Drawing constants
     const CELL_SIZE = 50;
     const PADDING = 20;
-    const width = size * CELL_SIZE + PADDING * 2;
-    const height = size * CELL_SIZE + PADDING * 2;
+    const width = cols * CELL_SIZE + PADDING * 2;
+    const height = rows * CELL_SIZE + PADDING * 2;
     const DOT_RADIUS_RATIO = 0.38;
     const DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
 

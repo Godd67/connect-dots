@@ -19,6 +19,7 @@ const seedInput = document.getElementById('seed-input');
 const settingsModal = document.getElementById('settings-modal');
 const settingsOpenBtn = document.getElementById('settings-open-btn');
 const settingsCloseBtn = document.getElementById('settings-close-btn');
+const canvasContainer = document.querySelector('.canvas-container');
 
 const settingDefaultSize = document.getElementById('setting-default-size');
 const settingAspectRatio = document.getElementById('setting-aspect-ratio');
@@ -46,12 +47,11 @@ const Settings = {
       if (saved) {
         this.data = { ...this.data, ...JSON.parse(saved) };
       } else {
-        // Default based on device
-        this.data.aspectRatio = isMobile() ? '9:16' : '1:1';
+        // First run: pick best aspect ratio based on screen dimensions
+        this.data.aspectRatio = getDefaultAspectRatio();
       }
     } catch (e) {
-      console.warn("Storage access denied or failed", e);
-      this.data.aspectRatio = isMobile() ? '9:16' : '1:1';
+      this.data.aspectRatio = getDefaultAspectRatio();
     }
     this.applyToUI();
   },
@@ -65,17 +65,17 @@ const Settings = {
   },
 
   applyToUI() {
-    settingDefaultSize.value = this.data.defaultGridSize;
-    settingAspectRatio.value = this.data.aspectRatio;
-    settingApplause.checked = this.data.applauseSound;
-    settingNav.value = this.data.navMode;
+    if (settingDefaultSize) settingDefaultSize.value = this.data.defaultGridSize;
+    if (settingAspectRatio) settingAspectRatio.value = this.data.aspectRatio;
+    if (settingApplause) settingApplause.checked = this.data.applauseSound;
+    if (settingNav) settingNav.value = this.data.navMode;
   },
 
   syncFromUI() {
-    this.data.defaultGridSize = parseInt(settingDefaultSize.value) || 10;
-    this.data.aspectRatio = settingAspectRatio.value || '1:1';
-    this.data.applauseSound = settingApplause.checked;
-    this.data.navMode = settingNav.value;
+    if (settingDefaultSize) this.data.defaultGridSize = parseInt(settingDefaultSize.value) || 10;
+    if (settingAspectRatio) this.data.aspectRatio = settingAspectRatio.value || '1:1';
+    if (settingApplause) this.data.applauseSound = settingApplause.checked;
+    if (settingNav) this.data.navMode = settingNav.value;
     this.save();
   }
 };
@@ -106,10 +106,37 @@ let CELL_SIZE = DEFAULT_CELL_SIZE;
 let DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
 
 function isMobile() {
-  return window.innerWidth <= 768;
+  // Check both width and user agent for better mobile/tablet detection
+  return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+/** Pick the best default aspect ratio for first-run based on physical screen dimensions. */
+function getDefaultAspectRatio() {
+  if (!isMobile()) return '1:1';
+  // Use screen (physical pixels) for best accuracy on mobile
+  const h = screen.height;
+  const w = screen.width;
+  const ratio = Math.max(h, w) / Math.min(h, w); // always > 1 regardless of orientation
+  if (ratio >= 1.6) return '9:16';   // Typical phone portrait (16/9 ≈ 1.78)
+  if (ratio >= 1.2) return '3:4';   // Typical tablet portrait (4/3 ≈ 1.33)
+  return '1:1';
+}
+
+function showToast(message, durationMs = 2500) {
+  let toast = document.getElementById('toast-msg');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast-msg';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('visible');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), durationMs);
 }
 
 function playApplause() {
+
   if (!Settings.data.applauseSound) return;
 
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -324,19 +351,23 @@ function init() {
         activePathId = null;
         draw();
       }
+      stopEdgeScroll();
       return;
     }
+    const touch = e.touches[0];
     if (isDrawing) {
       if (e.cancelable) e.preventDefault();
-      const touch = e.touches[0];
       handlePointerMove(touch);
+      checkEdgeScroll(touch);
+    } else {
+      stopEdgeScroll();
     }
   };
 
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
-  window.addEventListener('touchend', handlePointerUp);
-  window.addEventListener('touchcancel', handlePointerUp);
+  window.addEventListener('touchend', (e) => { handlePointerUp(e); stopEdgeScroll(); });
+  window.addEventListener('touchcancel', (e) => { handlePointerUp(e); stopEdgeScroll(); });
 
   // Populate build info
   const buildInfoEl = document.getElementById('build-info');
@@ -626,9 +657,12 @@ function generate() {
   seedInput.value = displaySeed;
   seedDirty = false;
 
-  // Calculate rows based on aspect ratio
+  // Calculate cols/rows to maintain the aspect ratio while keeping
+  // total cells near gridSize² — the stable generator's sweet spot.
+  // cols * (cols * ratio) = gridSize²  →  cols = gridSize / sqrt(ratio)
   const ratio = ASPECT_RATIOS[Settings.data.aspectRatio] || 1;
-  const rows = Math.round(cols * ratio);
+  cols = Math.max(4, Math.floor(cols / Math.sqrt(ratio)));
+  const rows = Math.max(4, Math.round(cols * ratio));
 
   // Reset state and switch to a fresh empty grid immediately
   resetGameState();
@@ -655,8 +689,7 @@ function generate() {
       });
 
       if (generator.generate()) {
-        loadedSeed = displaySeed; // Track the full display seed
-        // Explicitly mark stones in generated grid as -1
+        loadedSeed = displaySeed;
         for (let r = 0; r < grid.rows; r++) {
           for (let c = 0; c < grid.cols; c++) {
             if (grid.cells[r][c] === 0) grid.cells[r][c] = -1;
@@ -664,7 +697,7 @@ function generate() {
         }
         draw();
       } else {
-        console.error("Failed to generate valid board. Try again.");
+        console.warn('Failed to generate valid board. Try again.');
       }
     } catch (e) {
       console.error("Generation crashed:", e);
@@ -925,17 +958,95 @@ function drawDot(r, c, color, pathId) {
 }
 
 
-// Register Service Worker
+
+// ──────────────────────────────────────────────────────────
+// Mobile Edge-Drag Auto-Scroll
+// When a finger is close to a screen edge while drawing, we
+// automatically scroll the canvas container so the user can
+// reach dots that are off-screen without lifting their finger.
+// ──────────────────────────────────────────────────────────
+const EDGE_ZONE = 60;       // px from viewport edge that triggers scroll
+const MAX_SCROLL_SPEED = 12; // px per animation frame at the extreme edge
+
+const edgeScroll = { rafId: null, dx: 0, dy: 0 };
+
+function checkEdgeScroll(touch) {
+  if (!canvasContainer) return;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const x = touch.clientX;
+  const y = touch.clientY;
+
+  let dx = 0;
+  let dy = 0;
+
+  // Left / Right edges
+  if (x < EDGE_ZONE) {
+    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE);
+  } else if (x > vw - EDGE_ZONE) {
+    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE);
+  }
+
+  // Top / Bottom edges
+  if (y < EDGE_ZONE) {
+    dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE);
+  } else if (y > vh - EDGE_ZONE) {
+    dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE);
+  }
+
+  edgeScroll.dx = dx;
+  edgeScroll.dy = dy;
+
+  if (dx !== 0 || dy !== 0) {
+    if (!edgeScroll.rafId) {
+      const loop = () => {
+        if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
+          canvasContainer.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          edgeScroll.rafId = requestAnimationFrame(loop);
+        } else {
+          edgeScroll.rafId = null;
+        }
+      };
+      edgeScroll.rafId = requestAnimationFrame(loop);
+    }
+  } else {
+    stopEdgeScroll();
+  }
+}
+
+function stopEdgeScroll() {
+  edgeScroll.dx = 0;
+  edgeScroll.dy = 0;
+  if (edgeScroll.rafId) {
+    cancelAnimationFrame(edgeScroll.rafId);
+    edgeScroll.rafId = null;
+  }
+}
+
+// Service Worker handling
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(registration => {
-        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-      })
-      .catch(err => {
-        console.log('ServiceWorker registration failed: ', err);
-      });
-  });
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+  if (isLocal) {
+    // On localhost: unregister any old SW so Vite's live code is always served fresh
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      if (registrations.length > 0) {
+        Promise.all(registrations.map(r => r.unregister())).then(() => {
+          console.log('Dev mode: unregistered old Service Worker(s), reloading...');
+          location.reload();
+        });
+      }
+    });
+  } else {
+    // Production: register/update SW normally
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('SW registered, scope:', reg.scope))
+        .catch(err => console.log('SW registration failed:', err));
+    });
+  }
 }
 
 init();
+
