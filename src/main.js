@@ -1022,7 +1022,9 @@ function checkEdgeScroll(touch) {
   }
 
   if (dx !== 0 || dy !== 0) {
-    showEdgeIndicator(dx, dy);
+    if (SHOW_DEBUG) {
+      showEdgeIndicator(dx, dy);
+    }
     if (!edgeScroll.active) {
       edgeScroll.active = true;
     }
