@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.5 Initialized");
+  console.log("Connect The Dots - v1.1.6 Initialized");
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -386,7 +386,7 @@ function init() {
   // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.5-${buildNum} (Tap to Update)`;
+    buildInfoEl.textContent = `v1.1.6-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -997,11 +997,11 @@ function checkEdgeScroll(touch) {
   let dx = 0;
   let dy = 0;
 
-  // Left / Right edges
+  // Left / Right edges (Increased speed for horizontal a bit more)
   if (x < EDGE_ZONE) {
-    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE);
+    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE) * 1.2;
   } else if (x > vw - EDGE_ZONE) {
-    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE);
+    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE) * 1.2;
   }
 
   // Top / Bottom edges

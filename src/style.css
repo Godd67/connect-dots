@@ -355,15 +355,27 @@ canvas {
 
 .canvas-container {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  /* Use safe center: centers by default, but aligns to start if it overflows */
+  justify-content: safe center;
+  align-items: safe center;
   margin: 20px auto;
-  max-width: 100%;
+  width: 100%;
   overflow: auto;
-  /* Allow scroll when content is larger than viewport */
   -webkit-overflow-scrolling: touch;
-  /* Smooth momentum scroll on iOS */
-  scroll-behavior: smooth;
+  /* Disable smooth scroll to avoid conflict with JS animation loop */
+  scroll-behavior: auto;
+}
+
+/* Fallback for browsers that don't support justify-content: safe center */
+@supports not (justify-content: safe center) {
+  .canvas-container {
+    justify-content: center;
+  }
+
+  .canvas-container canvas {
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
 .bottom-controls {
