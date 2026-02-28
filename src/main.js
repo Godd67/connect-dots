@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.6 Initialized");
+  console.log("Connect The Dots - v1.1.7 Initialized");
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -386,7 +386,7 @@ function init() {
   // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.6-${buildNum} (Tap to Update)`;
+    buildInfoEl.textContent = `v1.1.7-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -984,48 +984,47 @@ const MAX_SCROLL_SPEED = 18; // px per animation frame
 const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
 
 function checkEdgeScroll(touch) {
-  // Use visualViewport if available for better mobile accuracy
-  const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  const vx = window.visualViewport ? window.visualViewport.offsetLeft : 0;
-  const vy = window.visualViewport ? window.visualViewport.offsetTop : 0;
-
-  // clientX/Y are relative to the visual viewport
+  // Simplest possible coordinates for cross-browser robustness
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
   const x = touch.clientX;
   const y = touch.clientY;
 
   let dx = 0;
   let dy = 0;
 
-  // Left / Right edges (Increased speed for horizontal a bit more)
+  // Left / Right edges
   if (x < EDGE_ZONE) {
-    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE) * 1.2;
+    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE) * 1.5; // Aggressive speed
   } else if (x > vw - EDGE_ZONE) {
-    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE) * 1.2;
+    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE) * 1.5;
   }
 
   // Top / Bottom edges
   if (y < EDGE_ZONE) {
-    dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE);
+    dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE) * 1.5;
   } else if (y > vh - EDGE_ZONE) {
-    dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE);
+    dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE) * 1.5;
   }
 
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
 
-  // Debug: Small dot where the finger is
+  // Visual feedback
   updateDebugDot(x, y);
+  updateDebugLog(x, y, vw, vh, dx, dy);
 
   if (dx !== 0 || dy !== 0) {
     showEdgeIndicator(dx, dy);
-    if (!edgeScroll.active) console.log("Edge Scroll Triggered:", dx.toFixed(1), dy.toFixed(1));
-    edgeScroll.active = true;
+    if (!edgeScroll.active) {
+      console.log("Edge Scroll Triggered:", dx.toFixed(1), dy.toFixed(1));
+      edgeScroll.active = true;
+    }
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
+          // Scroll both window and container to be safe
           window.scrollBy(edgeScroll.dx, edgeScroll.dy);
-          // Also try to scroll container as fallback
           if (canvasContainer) canvasContainer.scrollBy(edgeScroll.dx, edgeScroll.dy);
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
@@ -1037,6 +1036,29 @@ function checkEdgeScroll(touch) {
   } else {
     stopEdgeScroll();
   }
+}
+
+function updateDebugLog(x, y, vw, vh, dx, dy) {
+  let log = document.getElementById('debug-log');
+  if (!log) {
+    log = document.createElement('div');
+    log.id = 'debug-log';
+    log.style.position = 'fixed';
+    log.style.top = '5px';
+    log.style.left = '5px';
+    log.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    log.style.color = '#0f0';
+    log.style.padding = '5px';
+    log.style.fontSize = '10px';
+    log.style.fontFamily = 'monospace';
+    log.style.zIndex = '10001';
+    log.style.pointerEvents = 'none';
+    document.body.appendChild(log);
+  }
+  log.innerHTML = `V: 1.1.7 | Draw: ${isDrawing}<br>
+                   Touch: ${Math.round(x)}, ${Math.round(y)}<br>
+                   View: ${vw}x${vh}<br>
+                   Scroll: ${dx.toFixed(1)}, ${dy.toFixed(1)}`;
 }
 
 function updateDebugDot(x, y) {

@@ -350,20 +350,18 @@ canvas {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
   touch-action: auto;
   cursor: pointer;
-  display: block;
+  display: inline-block;
+  margin: 0 auto;
 }
 
 .canvas-container {
-  display: flex;
-  /* Use safe center: centers by default, but aligns to start if it overflows */
-  justify-content: safe center;
-  align-items: safe center;
+  display: block;
   margin: 20px auto;
   width: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  /* Disable smooth scroll to avoid conflict with JS animation loop */
   scroll-behavior: auto;
+  text-align: center;
 }
 
 /* Fallback for browsers that don't support justify-content: safe center */
