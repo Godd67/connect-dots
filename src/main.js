@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.10 Initialized");
+  console.log("Connect The Dots - v1.1.11 Initialized");
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -355,7 +355,10 @@ function init() {
     }
     const touch = e.touches[0];
     const started = handlePointerDown(touch);
-    if (started && e.cancelable) e.preventDefault();
+    if (started && e.cancelable) {
+      e.preventDefault();
+      canvas.style.touchAction = 'none'; // Lock browser scroll while drawing
+    }
   };
 
   const onTouchMove = (e) => {
@@ -386,7 +389,7 @@ function init() {
   // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.10-${buildNum} (Tap to Update)`;
+    buildInfoEl.textContent = `v1.1.11-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -1027,9 +1030,10 @@ function checkEdgeScroll(touch) {
           const dx = edgeScroll.dx;
           const dy = edgeScroll.dy;
 
-          const curX = window.scrollX || document.documentElement.scrollLeft;
-          const curY = window.scrollY || document.documentElement.scrollTop;
-          window.scrollTo(curX + dx, curY + dy);
+          const scroller = document.scrollingElement || document.documentElement;
+          const curX = scroller.scrollLeft;
+          const curY = scroller.scrollTop;
+          scroller.scrollTo(curX + dx, curY + dy);
 
           if (canvasContainer) {
             canvasContainer.scrollLeft += dx;
@@ -1070,10 +1074,11 @@ function updateDebugLog(x, y, vw, vh, dx, dy) {
   const cScX = canvasContainer ? canvasContainer.scrollLeft : 0;
   const cScY = canvasContainer ? canvasContainer.scrollTop : 0;
 
-  log.innerHTML = `V: 1.1.10 | Draw: ${isDrawing}<br>
+  log.innerHTML = `V: 1.1.11 | Draw: ${isDrawing}<br>
                    Touch: ${Math.round(x)}, ${Math.round(y)}<br>
                    WinScroll: ${Math.round(scX)}, ${Math.round(scY)}<br>
                    ContScroll: ${Math.round(cScX)}, ${Math.round(cScY)}<br>
+                   Dims: ${canvasContainer ? canvasContainer.scrollWidth : 0} / ${canvasContainer ? canvasContainer.clientWidth : 0}<br>
                    Speed: ${dx.toFixed(1)}, ${dy.toFixed(1)}`;
 }
 
@@ -1132,6 +1137,7 @@ function stopEdgeScroll() {
   edgeScroll.dx = 0;
   edgeScroll.dy = 0;
   edgeScroll.active = false;
+  canvas.style.touchAction = 'auto'; // Restore native scroll Header/
   const indicator = document.getElementById('edge-indicator');
   if (indicator) indicator.style.boxShadow = 'none';
   const dot = document.getElementById('debug-dot');
