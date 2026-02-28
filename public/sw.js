@@ -1,4 +1,4 @@
-const CACHE_NAME = 'connect-dots-v20';
+const CACHE_NAME = 'connect-dots-v21';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
