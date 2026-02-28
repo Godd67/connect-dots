@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.3 Initialized");
+  console.log("Connect The Dots - v1.1.4 Initialized");
   generateBtn.addEventListener('click', () => {
     // If user has not changed the seed input manually, randomize it.
     // This allows "New" to truly feel like a new level every time.
@@ -374,7 +374,7 @@ function init() {
   const buildInfoEl = document.getElementById('build-info');
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.3-${buildNum}`;
+    buildInfoEl.textContent = `v1.1.4-${buildNum}`;
   }
 
   // Initial generation
@@ -972,6 +972,7 @@ const MAX_SCROLL_SPEED = 15; // px per animation frame at the extreme edge
 const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
 
 function checkEdgeScroll(touch) {
+  // Use clientX/Y which are relative to the viewport
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const x = touch.clientX;
@@ -997,8 +998,10 @@ function checkEdgeScroll(touch) {
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
 
+  // Visual feedback: brief color pulse on the screen edge if scrolling
   if (dx !== 0 || dy !== 0) {
-    if (!edgeScroll.active) console.log("Edge Scroll Start:", dx, dy);
+    showEdgeIndicator(dx, dy);
+    if (!edgeScroll.active) console.log("Edge Scroll Start:", dx.toFixed(1), dy.toFixed(1));
     edgeScroll.active = true;
     if (!edgeScroll.rafId) {
       const loop = () => {
@@ -1017,10 +1020,39 @@ function checkEdgeScroll(touch) {
   }
 }
 
+function showEdgeIndicator(dx, dy) {
+  let indicator = document.getElementById('edge-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'edge-indicator';
+    indicator.style.position = 'fixed';
+    indicator.style.top = '0';
+    indicator.style.left = '0';
+    indicator.style.width = '100vw';
+    indicator.style.height = '100vh';
+    indicator.style.pointerEvents = 'none';
+    indicator.style.zIndex = '9999';
+    indicator.style.transition = 'box-shadow 0.2s';
+    document.body.appendChild(indicator);
+  }
+
+  let shadow = '';
+  const color = 'rgba(100, 108, 255, 0.3)';
+  const size = '40px';
+  if (dy < 0) shadow += `inset 0 ${size} ${size} -${size} ${color}, `; // Top
+  if (dy > 0) shadow += `inset 0 -${size} ${size} -${size} ${color}, `; // Bottom
+  if (dx < 0) shadow += `inset ${size} 0 ${size} -${size} ${color}, `; // Left
+  if (dx > 0) shadow += `inset -${size} 0 ${size} -${size} ${color}, `; // Right
+
+  indicator.style.boxShadow = shadow.trim().replace(/,$/, '');
+}
+
 function stopEdgeScroll() {
   edgeScroll.dx = 0;
   edgeScroll.dy = 0;
   edgeScroll.active = false;
+  const indicator = document.getElementById('edge-indicator');
+  if (indicator) indicator.style.boxShadow = 'none';
   if (edgeScroll.rafId) {
     cancelAnimationFrame(edgeScroll.rafId);
     edgeScroll.rafId = null;
