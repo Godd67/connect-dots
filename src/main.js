@@ -373,7 +373,7 @@ function init() {
   const buildInfoEl = document.getElementById('build-info');
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.0.0-${buildNum}`;
+    buildInfoEl.textContent = `v1.1.0-${buildNum}`;
   }
 
   // Initial generation
