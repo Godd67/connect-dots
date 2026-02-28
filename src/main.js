@@ -989,23 +989,23 @@ const MAX_SCROLL_SPEED = 18; // px per animation frame
 const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
 
 function checkEdgeScroll(touch) {
-  // Simplest possible coordinates for cross-browser robustness
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  // Use visualViewport for absolute screen edges even when zoomed
+  const vv = window.visualViewport;
+  const vw = vv ? vv.width : window.innerWidth;
+  const vh = vv ? vv.height : window.innerHeight;
+
   const x = touch.clientX;
   const y = touch.clientY;
 
   let dx = 0;
   let dy = 0;
 
-  // Left / Right edges
   if (x < EDGE_ZONE) {
-    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE) * 1.5; // Aggressive speed
+    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE) * 1.5;
   } else if (x > vw - EDGE_ZONE) {
     dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE) * 1.5;
   }
 
-  // Top / Bottom edges
   if (y < EDGE_ZONE) {
     dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE) * 1.5;
   } else if (y > vh - EDGE_ZONE) {
@@ -1015,33 +1015,24 @@ function checkEdgeScroll(touch) {
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
 
-  // Visual feedback
   updateDebugDot(x, y);
   updateDebugLog(x, y, vw, vh, dx, dy);
 
   if (dx !== 0 || dy !== 0) {
     showEdgeIndicator(dx, dy);
     if (!edgeScroll.active) {
-      console.log("Edge Scroll Triggered:", dx.toFixed(1), dy.toFixed(1));
       edgeScroll.active = true;
     }
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          // Force scroll on all possible targets
-          const dx = edgeScroll.dx;
-          const dy = edgeScroll.dy;
-
           const scroller = document.scrollingElement || document.documentElement;
-          const curX = scroller.scrollLeft;
-          const curY = scroller.scrollTop;
-          scroller.scrollTo(curX + dx, curY + dy);
-
+          // Try both window and container
+          scroller.scrollBy(edgeScroll.dx, edgeScroll.dy);
           if (canvasContainer) {
-            canvasContainer.scrollLeft += dx;
-            canvasContainer.scrollTop += dy;
+            canvasContainer.scrollLeft += edgeScroll.dx;
+            canvasContainer.scrollTop += edgeScroll.dy;
           }
-
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
