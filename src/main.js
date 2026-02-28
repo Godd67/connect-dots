@@ -185,7 +185,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.9 Initialized");
+  console.log("Connect The Dots - v1.1.10 Initialized");
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -385,7 +385,8 @@ function init() {
 
   // Populate build info version number
   if (buildInfoEl) {
-    buildInfoEl.textContent = `v1.1.9-${buildNum} (Tap to Update)`;
+    const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
+    buildInfoEl.textContent = `v1.1.10-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
@@ -1069,7 +1070,7 @@ function updateDebugLog(x, y, vw, vh, dx, dy) {
   const cScX = canvasContainer ? canvasContainer.scrollLeft : 0;
   const cScY = canvasContainer ? canvasContainer.scrollTop : 0;
 
-  log.innerHTML = `V: 1.1.9 | Draw: ${isDrawing}<br>
+  log.innerHTML = `V: 1.1.10 | Draw: ${isDrawing}<br>
                    Touch: ${Math.round(x)}, ${Math.round(y)}<br>
                    WinScroll: ${Math.round(scX)}, ${Math.round(scY)}<br>
                    ContScroll: ${Math.round(cScX)}, ${Math.round(cScY)}<br>
