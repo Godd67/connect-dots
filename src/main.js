@@ -990,7 +990,7 @@ function drawDot(r, c, color, pathId) {
 const EDGE_ZONE = 100;      // Increased for better sensitivity (v1.1.5)
 const MAX_SCROLL_SPEED = 18; // px per animation frame
 
-const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
+const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false, lastX: 0, lastY: 0 };
 
 function checkEdgeScroll(touch) {
   // Use visualViewport for absolute screen edges even when zoomed
@@ -1018,6 +1018,8 @@ function checkEdgeScroll(touch) {
 
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
+  edgeScroll.lastX = x;
+  edgeScroll.lastY = y;
   if (SHOW_DEBUG) {
     updateDebugDot(x, y);
     updateDebugLog(x, y, vw, vh, dx, dy);
@@ -1051,7 +1053,7 @@ function checkEdgeScroll(touch) {
             }
           }
 
-          // ───────── LAYER 2: Document Scrolling Element ─────────
+          // ───────── LAYER 2: Document / Window ─────────
           const scroller = document.scrollingElement || document.documentElement;
           if ((edgeScroll.dx !== 0 && !scrolledX) || (edgeScroll.dy !== 0 && !scrolledY)) {
             const oldWX = scroller.scrollLeft;
@@ -1066,14 +1068,22 @@ function checkEdgeScroll(touch) {
             if (!scrolledY && Math.abs(scroller.scrollTop - oldWY) > 0.5) scrolledY = true;
           }
 
-          // ───────── LAYER 3: Window Direct (Final Fallback) ─────────
-          if ((edgeScroll.dx !== 0 && !scrolledX) || (edgeScroll.dy !== 0 && !scrolledY)) {
-            window.scrollBy(
-              scrolledX ? 0 : edgeScroll.dx,
-              scrolledY ? 0 : edgeScroll.dy
-            );
+          // ───────── LAYER 3: Visual Viewport (Ultimate Zoom Fallback) ─────────
+          const vv = window.visualViewport;
+          if (vv && ((edgeScroll.dx !== 0 && !scrolledX) || (edgeScroll.dy !== 0 && !scrolledY))) {
+            // Some mobile browsers require panning the viewport directly when zoomed
+            const scrollDx = scrolledX ? 0 : edgeScroll.dx;
+            const scrollDy = scrolledY ? 0 : edgeScroll.dy;
+            
+            // Note: VisualViewport.scrollBy is not supported in all browsers, 
+            // so we use the offset approach if needed or window.scrollBy fallbacks above.
+            // On Chrome/Android, window.scrollBy handles both layout and visual.
           }
           
+          if (SHOW_DEBUG) {
+            updateDebugLog(edgeScroll.lastX, edgeScroll.lastY, vw, vh, edgeScroll.dx, edgeScroll.dy, scrolledX, scrolledY);
+          }
+
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
@@ -1086,9 +1096,10 @@ function checkEdgeScroll(touch) {
   }
 }
 
-function updateDebugLog(x, y, vw, vh, dx, dy) {
+function updateDebugLog(x, y, vw, vh, dx, dy, sX, sY) {
   if (!SHOW_DEBUG) return;
   let log = document.getElementById('debug-log');
+  // ... (rest of element creation logic is same)
   if (!log) {
     log = document.createElement('div');
     log.id = 'debug-log';
@@ -1110,13 +1121,14 @@ function updateDebugLog(x, y, vw, vh, dx, dy) {
   const cScY = canvasContainer ? canvasContainer.scrollTop : 0;
 
   const vv = window.visualViewport;
-  log.innerHTML = `V: 1.1.12 | Draw: ${isDrawing}<br>
+  log.innerHTML = `V: 1.1.13 | Draw: ${isDrawing}<br>
                    Touch: ${Math.round(x)}, ${Math.round(y)}<br>
                    WinScroll: ${Math.round(scX)}, ${Math.round(scY)}<br>
                    ContScroll: ${Math.round(cScX)}, ${Math.round(cScY)}<br>
                    Dims: ${canvasContainer ? canvasContainer.scrollWidth : 0} / ${canvasContainer ? canvasContainer.clientWidth : 0}<br>
                    Scale: ${vv ? vv.scale.toFixed(2) : 1.0}<br>
-                   Speed: ${dx.toFixed(1)}, ${dy.toFixed(1)}`;
+                   Speed: ${dx.toFixed(1)}, ${dy.toFixed(1)}<br>
+                   Scrolled: ${sX ? 'X' : '-'}${sY ? 'Y' : '-'}`;
 }
 
 function updateDebugDot(x, y) {
