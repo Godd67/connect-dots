@@ -361,7 +361,7 @@ function init() {
     if (started && e.cancelable) {
       e.preventDefault();
       canvas.style.touchAction = 'none'; // Lock browser scroll while drawing
-      document.body.classList.add('drawing-lock');
+      document.body.classList.add('force-scroll');
     }
   };
 
@@ -587,10 +587,10 @@ function handlePointerUp() {
     checkWin();
   }
   prevUserPaths = null;
-  document.body.classList.remove('drawing-lock');
   isDrawing = false;
   activePathId = null;
   lastCell = null;
+  document.body.classList.remove('force-scroll');
   stopEdgeScroll();
 }
 
@@ -987,9 +987,10 @@ function drawDot(r, c, color, pathId) {
 // automatically scroll the canvas container so the user can
 // reach dots that are off-screen without lifting their finger.
 // ──────────────────────────────────────────────────────────
-const EDGE_ZONE = 70;       // Balanced for reachability and safety
+const EDGE_ZONE_V = 80;     // Vertical edge zone
+const EDGE_ZONE_H = 120;    // Horizontal edge zone (larger for side gestures)
 const MAX_SCROLL_SPEED = 20; // Slightly faster for smoother feel
-const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false };
+const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false, lastX: 0, lastY: 0 };
 
 function checkEdgeScroll(touch) {
   // Use visualViewport for absolute screen edges even when zoomed
@@ -1003,23 +1004,25 @@ function checkEdgeScroll(touch) {
   let dx = 0;
   let dy = 0;
 
-  if (x < EDGE_ZONE) {
-    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE) * 1.5;
-  } else if (x > vw - EDGE_ZONE) {
-    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE) * 1.5;
+  if (x < EDGE_ZONE_H) {
+    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE_H) * 1.5;
+  } else if (x > vw - EDGE_ZONE_H) {
+    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE_H) * 1.5;
   }
 
-  if (y < EDGE_ZONE) {
-    dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE) * 1.5;
-  } else if (y > vh - EDGE_ZONE) {
-    dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE) * 1.5;
+  if (y < EDGE_ZONE_V) {
+    dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE_V) * 1.5;
+  } else if (y > vh - EDGE_ZONE_V) {
+    dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE_V) * 1.5;
   }
 
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
+  edgeScroll.lastX = x;
+  edgeScroll.lastY = y;
   if (SHOW_DEBUG) {
     updateDebugDot(x, y);
-    updateDebugLog(x, y, vw, vh, dx, dy, 0, 0);
+    updateDebugLog(x, y, vw, vh, dx, dy);
   }
 
   if (dx !== 0 || dy !== 0) {
@@ -1032,12 +1035,28 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          // Simplified: Scroll everything simultaneously for maximum compatibility
+          // AGGRESSIVE PANNING: Try everything at once to move the view
+          
+          // 1. Move the window/page (handles visual viewport on most browsers)
           window.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          
+          // 2. Move the container specifically (handles layout overflow)
           if (canvasContainer) {
             canvasContainer.scrollLeft += edgeScroll.dx;
             canvasContainer.scrollTop += edgeScroll.dy;
           }
+
+          // 3. Fallback for document scrolling element
+          const scroller = document.scrollingElement || document.documentElement;
+          if (scroller) {
+             scroller.scrollLeft += edgeScroll.dx;
+             scroller.scrollTop += edgeScroll.dy;
+          }
+          
+          if (SHOW_DEBUG) {
+            updateDebugLog(edgeScroll.lastX, edgeScroll.lastY, vw, vh, edgeScroll.dx, edgeScroll.dy, true, true);
+          }
+
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
@@ -1053,7 +1072,6 @@ function checkEdgeScroll(touch) {
 function updateDebugLog(x, y, vw, vh, dx, dy, sX, sY) {
   if (!SHOW_DEBUG) return;
   let log = document.getElementById('debug-log');
-  // ... (rest of element creation logic is same)
   if (!log) {
     log = document.createElement('div');
     log.id = 'debug-log';
