@@ -131,6 +131,14 @@ body {
   color: var(--text-color);
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   /* Allow standard overflow behavior for programmatic scroll */
+  overflow-x: hidden; /* Prevent horizontal wobble unless we force it */
+}
+
+/* "Hyper-Force" expansion: Ensures browser allows programmatic scrolling even if content fits. */
+body.force-scroll {
+  min-width: 100.1vw;
+  min-height: 100.1vh;
+  overflow: auto !important;
 }
 
 #app {

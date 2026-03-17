@@ -361,6 +361,7 @@ function init() {
     if (started && e.cancelable) {
       e.preventDefault();
       canvas.style.touchAction = 'none'; // Lock browser scroll while drawing
+      document.body.classList.add('force-scroll');
     }
   };
 
@@ -589,6 +590,7 @@ function handlePointerUp() {
   isDrawing = false;
   activePathId = null;
   lastCell = null;
+  document.body.classList.remove('force-scroll');
   stopEdgeScroll();
 }
 
@@ -1031,26 +1033,45 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          // 1. First target the canvas container if it's scrollable
-          let scrolled = false;
+          let scrolledX = false;
+          let scrolledY = false;
+
+          // ───────── LAYER 1: Canvas Container ─────────
           if (canvasContainer) {
-            const maxX = canvasContainer.scrollWidth - canvasContainer.clientWidth;
-            const maxY = canvasContainer.scrollHeight - canvasContainer.clientHeight;
+            const oldX = canvasContainer.scrollLeft;
+            const oldY = canvasContainer.scrollTop;
             
-            if (maxX > 0 || maxY > 0) {
-              const oldX = canvasContainer.scrollLeft;
-              const oldY = canvasContainer.scrollTop;
+            if (edgeScroll.dx !== 0) {
               canvasContainer.scrollLeft += edgeScroll.dx;
+              if (Math.abs(canvasContainer.scrollLeft - oldX) > 0.5) scrolledX = true;
+            }
+            if (edgeScroll.dy !== 0) {
               canvasContainer.scrollTop += edgeScroll.dy;
-              if (Math.abs(canvasContainer.scrollLeft - oldX) > 0.5 || Math.abs(canvasContainer.scrollTop - oldY) > 0.5) {
-                scrolled = true;
-              }
+              if (Math.abs(canvasContainer.scrollTop - oldY) > 0.5) scrolledY = true;
             }
           }
-          
-          // 2. Fallback to window scroll if container didn't scroll or isn't enough
-          if (!scrolled) {
-            window.scrollBy(edgeScroll.dx, edgeScroll.dy);
+
+          // ───────── LAYER 2: Document Scrolling Element ─────────
+          const scroller = document.scrollingElement || document.documentElement;
+          if ((edgeScroll.dx !== 0 && !scrolledX) || (edgeScroll.dy !== 0 && !scrolledY)) {
+            const oldWX = scroller.scrollLeft;
+            const oldWY = scroller.scrollTop;
+            
+            scroller.scrollBy(
+              scrolledX ? 0 : edgeScroll.dx,
+              scrolledY ? 0 : edgeScroll.dy
+            );
+            
+            if (!scrolledX && Math.abs(scroller.scrollLeft - oldWX) > 0.5) scrolledX = true;
+            if (!scrolledY && Math.abs(scroller.scrollTop - oldWY) > 0.5) scrolledY = true;
+          }
+
+          // ───────── LAYER 3: Window Direct (Final Fallback) ─────────
+          if ((edgeScroll.dx !== 0 && !scrolledX) || (edgeScroll.dy !== 0 && !scrolledY)) {
+            window.scrollBy(
+              scrolledX ? 0 : edgeScroll.dx,
+              scrolledY ? 0 : edgeScroll.dy
+            );
           }
           
           edgeScroll.rafId = requestAnimationFrame(loop);
