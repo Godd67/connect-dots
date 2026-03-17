@@ -1031,13 +1031,28 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          const scroller = document.scrollingElement || document.documentElement;
-          // Try both window and container
-          scroller.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          // 1. First target the canvas container if it's scrollable
+          let scrolled = false;
           if (canvasContainer) {
-            canvasContainer.scrollLeft += edgeScroll.dx;
-            canvasContainer.scrollTop += edgeScroll.dy;
+            const maxX = canvasContainer.scrollWidth - canvasContainer.clientWidth;
+            const maxY = canvasContainer.scrollHeight - canvasContainer.clientHeight;
+            
+            if (maxX > 0 || maxY > 0) {
+              const oldX = canvasContainer.scrollLeft;
+              const oldY = canvasContainer.scrollTop;
+              canvasContainer.scrollLeft += edgeScroll.dx;
+              canvasContainer.scrollTop += edgeScroll.dy;
+              if (Math.abs(canvasContainer.scrollLeft - oldX) > 0.5 || Math.abs(canvasContainer.scrollTop - oldY) > 0.5) {
+                scrolled = true;
+              }
+            }
           }
+          
+          // 2. Fallback to window scroll if container didn't scroll or isn't enough
+          if (!scrolled) {
+            window.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          }
+          
           edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
@@ -1139,7 +1154,8 @@ function stopEdgeScroll() {
   edgeScroll.dx = 0;
   edgeScroll.dy = 0;
   edgeScroll.active = false;
-  canvas.style.touchAction = 'auto'; // Restore native scroll Header/
+  // Note: touchAction is restored in handlePointerUp, not here,
+  // to prevent standard scroll from kicking in while still drawing.
   const indicator = document.getElementById('edge-indicator');
   if (indicator) indicator.style.boxShadow = 'none';
   if (SHOW_DEBUG) {

@@ -355,25 +355,21 @@ canvas {
 }
 
 .canvas-container {
-  display: block;
+  display: flex;
   margin: 20px auto;
   width: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: auto;
-  text-align: center;
+  justify-content: safe center;
+  align-items: flex-start;
+  min-height: 200px;
 }
 
-/* Fallback for browsers that don't support justify-content: safe center */
-@supports not (justify-content: safe center) {
-  .canvas-container {
-    justify-content: center;
-  }
-
-  .canvas-container canvas {
-    margin-left: auto;
-    margin-right: auto;
-  }
+/* Center the canvas within its flex container */
+.canvas-container canvas {
+  margin: 0 auto;
+  flex-shrink: 0;
 }
 
 .bottom-controls {
@@ -460,10 +456,8 @@ footer p {
   }
 
   .canvas-container {
-    justify-content: flex-start;
-    /* Align canvas to the start for scroll */
-    align-items: flex-start;
-    max-height: 65vh;
+    /* flex centering handled above is better */
+    max-height: 70vh;
     /* Limit visible area to leave room for controls */
   }
 }
