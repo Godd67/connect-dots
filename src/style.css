@@ -133,11 +133,10 @@ body {
   /* Allow standard overflow behavior for programmatic scroll */
 }
 
-/* "Hyper-Force" expansion: Ensures browser allows programmatic scrolling even if content fits. */
-body.force-scroll {
-  min-width: 120vw;
-  min-height: 120vh;
-  overflow: auto !important;
+/* Locked state during drawing */
+body.drawing-lock {
+  overflow: hidden !important;
+  touch-action: none;
 }
 
 #app {
@@ -362,21 +361,18 @@ canvas {
 }
 
 .canvas-container {
-  display: flex;
+  display: block;
   margin: 20px auto;
   width: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: auto;
-  justify-content: safe center;
-  align-items: flex-start;
-  min-height: 200px;
+  text-align: center;
 }
 
-/* Center the canvas within its flex container */
 .canvas-container canvas {
+  display: inline-block;
   margin: 0 auto;
-  flex-shrink: 0;
 }
 
 .bottom-controls {
