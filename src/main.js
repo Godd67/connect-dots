@@ -2,6 +2,7 @@ import { Grid } from './Grid.js';
 import { Generator } from './Generator.js';
 import { Random } from './Random.js';
 const SHOW_DEBUG = import.meta.env.VITE_SHOW_DEBUG === 'true';
+const APP_VERSION = '1.1.13';
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
@@ -188,7 +189,7 @@ function calculateCellSize(cols, rows) {
 }
 
 function init() {
-  console.log("Connect The Dots - v1.1.12 Initialized");
+  console.log(`Connect The Dots - v${APP_VERSION} Initialized`);
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
@@ -390,7 +391,7 @@ function init() {
   // Populate build info version number
   if (buildInfoEl) {
     const buildNum = import.meta.env.VITE_BUILD_NUMBER || 'dev';
-    buildInfoEl.textContent = `v1.1.12-${buildNum} (Tap to Update)`;
+    buildInfoEl.textContent = `v${APP_VERSION}-${buildNum} (Tap to Update)`;
   }
 
   // Initial generation
