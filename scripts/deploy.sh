@@ -1,21 +1,26 @@
 #!/bin/bash
+set -euo pipefail
 
 # Connect The Dots - Server Deployment Script
-# Routine: Pull -> Build -> Start
+# Routine: Update repo -> Build fresh images -> Recreate services
 
-echo "🚀 Starting deployment..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d-%H%M)}"
 
-# 1. Pull latest code
-echo "📥 Pulling latest changes from Git..."
-git pull
+cd "$PROJECT_ROOT"
 
-# 2. Build with automatic timestamped version
-# Note: The Dockerfile now handles the timestamp generation automatically
-echo "🛠️ Building Docker images..."
-docker compose build
+echo "Starting deployment from $PROJECT_ROOT"
+echo "Build number: $BUILD_NUMBER"
 
-# 3. Start services
-echo "⚡ Starting services..."
-docker compose up -d
+echo "Pulling latest changes from Git..."
+git pull --ff-only
 
-echo "✅ Done! Check your site footer to see the new build timestamp."
+echo "Building Docker images..."
+docker compose build --pull --build-arg BUILD_NUMBER="$BUILD_NUMBER"
+
+echo "Recreating services..."
+docker compose up -d --force-recreate
+
+echo "Deployment complete."
+echo "Expected footer version: v1.1.13-$BUILD_NUMBER"
