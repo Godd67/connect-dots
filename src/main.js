@@ -480,7 +480,7 @@ function handlePointerMove(e) {
   if (!isDrawing || !activePathId) return;
 
   const cell = getCellFromCoords(e.clientX, e.clientY);
-  if (isDrawing && !e.skipEdgeScroll) {
+  if (isDrawing) {
     checkEdgeScroll(e);
   }
   if (!cell) return;
@@ -992,60 +992,6 @@ const EDGE_ZONE_H = 120;    // Horizontal edge zone (larger for side gestures)
 const MAX_SCROLL_SPEED = 20; // Slightly faster for smoother feel
 const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false, lastX: 0, lastY: 0 };
 
-function clampScrollDelta(delta, current, max) {
-  if (delta === 0) return 0;
-  if (delta < 0) return Math.max(delta, -current);
-  return Math.min(delta, max - current);
-}
-
-function applyScrollDelta(target, dx, dy) {
-  if (!target) return { movedX: 0, movedY: 0 };
-
-  const startLeft = target.scrollLeft;
-  const startTop = target.scrollTop;
-  const maxLeft = Math.max(0, target.scrollWidth - target.clientWidth);
-  const maxTop = Math.max(0, target.scrollHeight - target.clientHeight);
-
-  const nextDx = clampScrollDelta(dx, startLeft, maxLeft);
-  const nextDy = clampScrollDelta(dy, startTop, maxTop);
-
-  if (nextDx !== 0) target.scrollLeft = startLeft + nextDx;
-  if (nextDy !== 0) target.scrollTop = startTop + nextDy;
-
-  return {
-    movedX: target.scrollLeft - startLeft,
-    movedY: target.scrollTop - startTop
-  };
-}
-
-function autoScrollBy(dx, dy) {
-  let movedX = 0;
-  let movedY = 0;
-
-  if (canvasContainer) {
-    const moved = applyScrollDelta(canvasContainer, dx, dy);
-    movedX += moved.movedX;
-    movedY += moved.movedY;
-  }
-
-  const scroller = document.scrollingElement || document.documentElement;
-  if (Math.abs(movedX) < Math.abs(dx) || Math.abs(movedY) < Math.abs(dy)) {
-    const moved = applyScrollDelta(scroller, dx - movedX, dy - movedY);
-    movedX += moved.movedX;
-    movedY += moved.movedY;
-  }
-
-  if ((Math.abs(movedX) < Math.abs(dx) || Math.abs(movedY) < Math.abs(dy)) && (dx !== 0 || dy !== 0)) {
-    const startX = window.scrollX;
-    const startY = window.scrollY;
-    window.scrollBy(dx - movedX, dy - movedY);
-    movedX += (window.scrollX - startX);
-    movedY += (window.scrollY - startY);
-  }
-
-  return { movedX, movedY };
-}
-
 function checkEdgeScroll(touch) {
   // Use visualViewport for absolute screen edges even when zoomed
   const vv = window.visualViewport;
@@ -1089,34 +1035,29 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          const moved = autoScrollBy(edgeScroll.dx, edgeScroll.dy);
-
-          if (moved.movedX !== 0 || moved.movedY !== 0) {
-            handlePointerMove({
-              clientX: edgeScroll.lastX,
-              clientY: edgeScroll.lastY,
-              skipEdgeScroll: true
-            });
+          // AGGRESSIVE PANNING: Try everything at once to move the view
+          
+          // 1. Move the window/page (handles visual viewport on most browsers)
+          window.scrollBy(edgeScroll.dx, edgeScroll.dy);
+          
+          // 2. Move the container specifically (handles layout overflow)
+          if (canvasContainer) {
+            canvasContainer.scrollLeft += edgeScroll.dx;
+            canvasContainer.scrollTop += edgeScroll.dy;
           }
 
+          // 3. Fallback for document scrolling element
+          const scroller = document.scrollingElement || document.documentElement;
+          if (scroller) {
+             scroller.scrollLeft += edgeScroll.dx;
+             scroller.scrollTop += edgeScroll.dy;
+          }
+          
           if (SHOW_DEBUG) {
-            updateDebugLog(
-              edgeScroll.lastX,
-              edgeScroll.lastY,
-              vw,
-              vh,
-              edgeScroll.dx,
-              edgeScroll.dy,
-              moved.movedX !== 0,
-              moved.movedY !== 0
-            );
+            updateDebugLog(edgeScroll.lastX, edgeScroll.lastY, vw, vh, edgeScroll.dx, edgeScroll.dy, true, true);
           }
 
-          if (moved.movedX !== 0 || moved.movedY !== 0) {
-            edgeScroll.rafId = requestAnimationFrame(loop);
-          } else {
-            stopEdgeScroll();
-          }
+          edgeScroll.rafId = requestAnimationFrame(loop);
         } else {
           edgeScroll.rafId = null;
         }
