@@ -480,7 +480,7 @@ function handlePointerMove(e) {
   if (!isDrawing || !activePathId) return;
 
   const cell = getCellFromCoords(e.clientX, e.clientY);
-  if (isDrawing) {
+  if (isDrawing && !e.skipEdgeScroll) {
     checkEdgeScroll(e);
   }
   if (!cell) return;
@@ -992,11 +992,40 @@ const EDGE_ZONE_H = 120;    // Horizontal edge zone (larger for side gestures)
 const MAX_SCROLL_SPEED = 20; // Slightly faster for smoother feel
 const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false, lastX: 0, lastY: 0 };
 
+function getEdgeScrollTarget() {
+  if (canvasContainer) return canvasContainer;
+  return document.scrollingElement || document.documentElement;
+}
+
+function getAvailableScroll(target) {
+  if (!target) {
+    return { left: 0, right: 0, up: 0, down: 0 };
+  }
+
+  const maxLeft = Math.max(0, target.scrollWidth - target.clientWidth);
+  const maxTop = Math.max(0, target.scrollHeight - target.clientHeight);
+
+  return {
+    left: target.scrollLeft,
+    right: maxLeft - target.scrollLeft,
+    up: target.scrollTop,
+    down: maxTop - target.scrollTop
+  };
+}
+
+function clampAxisDelta(delta, negativeLimit, positiveLimit) {
+  if (delta < 0) return -Math.min(Math.abs(delta), negativeLimit);
+  if (delta > 0) return Math.min(delta, positiveLimit);
+  return 0;
+}
+
 function checkEdgeScroll(touch) {
   // Use visualViewport for absolute screen edges even when zoomed
   const vv = window.visualViewport;
   const vw = vv ? vv.width : window.innerWidth;
   const vh = vv ? vv.height : window.innerHeight;
+  const scrollTarget = getEdgeScrollTarget();
+  const available = getAvailableScroll(scrollTarget);
 
   const x = touch.clientX;
   const y = touch.clientY;
@@ -1015,6 +1044,9 @@ function checkEdgeScroll(touch) {
   } else if (y > vh - EDGE_ZONE_V) {
     dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE_V) * 1.5;
   }
+
+  dx = clampAxisDelta(dx, available.left, available.right);
+  dy = clampAxisDelta(dy, available.up, available.down);
 
   edgeScroll.dx = dx;
   edgeScroll.dy = dy;
@@ -1035,29 +1067,31 @@ function checkEdgeScroll(touch) {
     if (!edgeScroll.rafId) {
       const loop = () => {
         if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          // AGGRESSIVE PANNING: Try everything at once to move the view
-          
-          // 1. Move the window/page (handles visual viewport on most browsers)
-          window.scrollBy(edgeScroll.dx, edgeScroll.dy);
-          
-          // 2. Move the container specifically (handles layout overflow)
-          if (canvasContainer) {
-            canvasContainer.scrollLeft += edgeScroll.dx;
-            canvasContainer.scrollTop += edgeScroll.dy;
+          const target = getEdgeScrollTarget();
+          const limits = getAvailableScroll(target);
+          const stepX = clampAxisDelta(edgeScroll.dx, limits.left, limits.right);
+          const stepY = clampAxisDelta(edgeScroll.dy, limits.up, limits.down);
+
+          if (stepX !== 0 || stepY !== 0) {
+            target.scrollLeft += stepX;
+            target.scrollTop += stepY;
+
+            handlePointerMove({
+              clientX: edgeScroll.lastX,
+              clientY: edgeScroll.lastY,
+              skipEdgeScroll: true
+            });
           }
 
-          // 3. Fallback for document scrolling element
-          const scroller = document.scrollingElement || document.documentElement;
-          if (scroller) {
-             scroller.scrollLeft += edgeScroll.dx;
-             scroller.scrollTop += edgeScroll.dy;
-          }
-          
           if (SHOW_DEBUG) {
-            updateDebugLog(edgeScroll.lastX, edgeScroll.lastY, vw, vh, edgeScroll.dx, edgeScroll.dy, true, true);
+            updateDebugLog(edgeScroll.lastX, edgeScroll.lastY, vw, vh, stepX, stepY, stepX !== 0, stepY !== 0);
           }
 
-          edgeScroll.rafId = requestAnimationFrame(loop);
+          if (stepX === 0 && stepY === 0) {
+            stopEdgeScroll();
+          } else {
+            edgeScroll.rafId = requestAnimationFrame(loop);
+          }
         } else {
           edgeScroll.rafId = null;
         }
