@@ -96,7 +96,8 @@ let seedDirty = false; // Track if user edited the seed input
 
 // Rendering constants
 const DEFAULT_CELL_SIZE = 50;
-const MIN_CELL_SIZE = 36; // Ensure grid can overflow for scrolling (v1.1.12)
+const MIN_MOBILE_CELL_SIZE = 12; // Allow large boards to fit within the initial mobile viewport
+const MOBILE_INITIAL_FIT = 0.94; // Leave a little slack so the board starts slightly narrower than the screen
 const DOT_RADIUS_RATIO = 0.38;
 const PADDING = 20;
 
@@ -177,13 +178,13 @@ function calculateCellSize(cols, rows) {
   if (!isMobile()) return DEFAULT_CELL_SIZE;
   const availableWidth = document.documentElement.clientWidth || window.innerWidth;
   const availableHeight = document.documentElement.clientHeight || window.innerHeight;
-  const maxWidth = availableWidth - PADDING * 2 - 30; // 30 extra for safety margin
-  const maxHeight = availableHeight - 200; // Leave room for header/controls
+  const maxWidth = Math.floor((availableWidth - PADDING * 2 - 30) * MOBILE_INITIAL_FIT);
+  const maxHeight = Math.floor((availableHeight - 200) * MOBILE_INITIAL_FIT); // Leave room for header/controls
 
   const cellW = Math.floor(maxWidth / cols);
   const cellH = Math.floor(maxHeight / rows);
   const bestFit = Math.min(cellW, cellH);
-  return Math.max(MIN_CELL_SIZE, Math.min(bestFit, DEFAULT_CELL_SIZE));
+  return Math.max(MIN_MOBILE_CELL_SIZE, Math.min(bestFit, DEFAULT_CELL_SIZE));
 }
 
 function init() {
