@@ -671,11 +671,9 @@ function generate() {
   seedInput.value = displaySeed;
   seedDirty = false;
 
-  // Calculate cols/rows to maintain the aspect ratio while keeping
-  // total cells near gridSize² — the stable generator's sweet spot.
-  // cols * (cols * ratio) = gridSize²  →  cols = gridSize / sqrt(ratio)
+  // Treat the selected size as the actual play-grid column count.
+  // Aspect ratio only affects the number of rows.
   const ratio = ASPECT_RATIOS[Settings.data.aspectRatio] || 1;
-  cols = Math.max(4, Math.floor(cols / Math.sqrt(ratio)));
   const rows = Math.max(4, Math.round(cols * ratio));
 
   // Reset state and switch to a fresh empty grid immediately
