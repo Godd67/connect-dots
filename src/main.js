@@ -158,6 +158,13 @@ function showToast(message, durationMs = 2500) {
 function updateAutoscrollDebug(details) {
   if (!AUTOSCROLL_DEBUG) return;
 
+  const scroller = document.scrollingElement || document.documentElement;
+  const pageX = Math.round(window.scrollX || scroller?.scrollLeft || 0);
+  const pageY = Math.round(window.scrollY || scroller?.scrollTop || 0);
+  const containerX = Math.round(canvasContainer?.scrollLeft || 0);
+  const containerY = Math.round(canvasContainer?.scrollTop || 0);
+  const canvasRect = canvas.getBoundingClientRect();
+
   const lines = [
     `draw:${isDrawing} path:${activePathId ?? '-'}`,
     `ptr:${details.clientX ?? '-'},${details.clientY ?? '-'}`,
@@ -166,30 +173,38 @@ function updateAutoscrollDebug(details) {
     `edge:${details.distLeft ?? '-'} ${details.distRight ?? '-'} ${details.distTop ?? '-'} ${details.distBottom ?? '-'}`,
     `hidden:${details.hiddenLeft ?? 0} ${details.hiddenRight ?? 0} ${details.hiddenUp ?? 0} ${details.hiddenDown ?? 0}`,
     `scroll:${details.dx ?? 0} ${details.dy ?? 0}`,
+    `page:${pageX} ${pageY}`,
+    `cont:${containerX} ${containerY}`,
+    `canvas:${Math.round(canvasRect.left)} ${Math.round(canvasRect.top)} ${Math.round(canvasRect.right)} ${Math.round(canvasRect.bottom)}`,
     `reason:${details.reason ?? '-'}`
   ];
 
-  let panel = document.getElementById('autoscroll-debug');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'autoscroll-debug';
-    panel.style.position = 'fixed';
-    panel.style.left = '8px';
-    panel.style.bottom = '8px';
-    panel.style.zIndex = '10002';
-    panel.style.pointerEvents = 'none';
-    panel.style.background = 'rgba(0, 0, 0, 0.78)';
-    panel.style.color = '#8ef58e';
-    panel.style.font = '12px/1.35 monospace';
-    panel.style.padding = '8px 10px';
-    panel.style.borderRadius = '8px';
-    panel.style.whiteSpace = 'pre-line';
-    panel.style.maxWidth = 'calc(100vw - 16px)';
-    document.body.appendChild(panel);
-  }
+  const panel = ensureAutoscrollDebugPanel();
 
   panel.textContent = lines.join('\n');
   console.debug('[autoscroll]', details);
+}
+
+function ensureAutoscrollDebugPanel() {
+  let panel = document.getElementById('autoscroll-debug');
+  if (panel) return panel;
+
+  panel = document.createElement('div');
+  panel.id = 'autoscroll-debug';
+  panel.style.position = 'fixed';
+  panel.style.left = '8px';
+  panel.style.bottom = '8px';
+  panel.style.zIndex = '10002';
+  panel.style.pointerEvents = 'none';
+  panel.style.background = 'rgba(0, 0, 0, 0.78)';
+  panel.style.color = '#8ef58e';
+  panel.style.font = '12px/1.35 monospace';
+  panel.style.padding = '8px 10px';
+  panel.style.borderRadius = '8px';
+  panel.style.whiteSpace = 'pre-line';
+  panel.style.maxWidth = 'calc(100vw - 16px)';
+  document.body.appendChild(panel);
+  return panel;
 }
 
 function playApplause() {
@@ -244,6 +259,10 @@ function calculateCellSize(cols, rows) {
 
 function init() {
   console.log(`Connect The Dots - v${APP_VERSION} Initialized`);
+  if (AUTOSCROLL_DEBUG) {
+    ensureAutoscrollDebugPanel();
+    updateAutoscrollDebug({ reason: 'idle' });
+  }
 
   // Cache Control: Clear SW and reload if user clicks the version/update link
   const buildInfoEl = document.getElementById('build-info');
