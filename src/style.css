@@ -354,6 +354,8 @@ canvas {
   cursor: pointer;
   display: inline-block;
   margin: 0 auto;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
 .canvas-container {
@@ -366,6 +368,7 @@ canvas {
   justify-content: safe center;
   align-items: flex-start;
   min-height: 200px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Center the canvas within its flex container */
