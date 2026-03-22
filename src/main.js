@@ -20,6 +20,7 @@ const seedInput = document.getElementById('seed-input');
 const settingsModal = document.getElementById('settings-modal');
 const settingsOpenBtn = document.getElementById('settings-open-btn');
 const settingsCloseBtn = document.getElementById('settings-close-btn');
+const canvasContainer = document.querySelector('.canvas-container');
 
 const settingDefaultSize = document.getElementById('setting-default-size');
 const settingAspectRatio = document.getElementById('setting-aspect-ratio');
@@ -98,6 +99,10 @@ let seedDirty = false; // Track if user edited the seed input
 const DEFAULT_CELL_SIZE = 50;
 const MIN_MOBILE_CELL_SIZE = 12; // Allow large boards to fit within the initial mobile viewport
 const MOBILE_INITIAL_FIT = 0.94; // Leave a little slack so the board starts slightly narrower than the screen
+const AUTOSCROLL_EDGE_ZONE = 48;
+const AUTOSCROLL_STOP_BUFFER = 24;
+const AUTOSCROLL_DIRECTION_THRESHOLD = 6;
+const AUTOSCROLL_MAX_SPEED = 18;
 const DOT_RADIUS_RATIO = 0.38;
 const PADDING = 20;
 
@@ -106,6 +111,15 @@ const dpr = window.devicePixelRatio || 1;
 // Dynamic values (recalculated on generate)
 let CELL_SIZE = DEFAULT_CELL_SIZE;
 let DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
+const edgeScroll = {
+  rafId: null,
+  dx: 0,
+  dy: 0,
+  pointerX: null,
+  pointerY: null,
+  moveX: 0,
+  moveY: 0
+};
 
 function isMobile() {
   // Check both width and user agent for better mobile/tablet detection
@@ -354,6 +368,7 @@ function init() {
         activePathId = null;
         draw();
       }
+      stopEdgeScroll(true);
       return;
     }
     const touch = e.touches[0];
@@ -370,6 +385,7 @@ function init() {
         activePathId = null;
         draw();
       }
+      stopEdgeScroll(true);
       return;
     }
     const touch = e.touches[0];
@@ -442,6 +458,7 @@ function getCellFromCoords(x, y) {
 }
 
 function handlePointerDown(e) {
+  stopEdgeScroll(true);
   if (!grid) return false;
   const cell = getCellFromCoords(e.clientX, e.clientY);
 
@@ -466,6 +483,10 @@ function handlePointerDown(e) {
       activePathId = pathId;
       userPaths[pathId] = [cell];
       lastCell = cell;
+      edgeScroll.pointerX = e.clientX;
+      edgeScroll.pointerY = e.clientY;
+      edgeScroll.moveX = 0;
+      edgeScroll.moveY = 0;
       draw();
       return true;
     }
@@ -475,8 +496,12 @@ function handlePointerDown(e) {
 
 function handlePointerMove(e) {
   if (!isDrawing || !activePathId) return;
+  updateEdgeScrollIntent(e.clientX, e.clientY);
+  extendActivePathAt(e.clientX, e.clientY);
+}
 
-  const cell = getCellFromCoords(e.clientX, e.clientY);
+function extendActivePathAt(clientX, clientY) {
+  const cell = getCellFromCoords(clientX, clientY);
   if (!cell) return;
 
   const [r, c] = cell;
@@ -584,6 +609,7 @@ function handlePointerUp() {
   isDrawing = false;
   activePathId = null;
   lastCell = null;
+  stopEdgeScroll(true);
 }
 
 function checkWin() {
@@ -618,6 +644,145 @@ function checkWin() {
     console.log("ALL PATHS CONNECTED!");
     updateTitle(true);
     playApplause();
+  }
+}
+
+function getScrollViewportRect() {
+  if (canvasContainer) {
+    return canvasContainer.getBoundingClientRect();
+  }
+  return {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight
+  };
+}
+
+function getHiddenBoardDistances() {
+  if (!canvasContainer) {
+    return { left: 0, right: 0, up: 0, down: 0 };
+  }
+
+  return {
+    left: canvasContainer.scrollLeft,
+    right: Math.max(0, canvasContainer.scrollWidth - canvasContainer.clientWidth - canvasContainer.scrollLeft),
+    up: canvasContainer.scrollTop,
+    down: Math.max(0, canvasContainer.scrollHeight - canvasContainer.clientHeight - canvasContainer.scrollTop)
+  };
+}
+
+function getEdgeSpeed(distanceToEdge) {
+  const clampedDistance = Math.max(0, Math.min(distanceToEdge, AUTOSCROLL_EDGE_ZONE));
+  return AUTOSCROLL_MAX_SPEED * (1 - clampedDistance / AUTOSCROLL_EDGE_ZONE);
+}
+
+function applyAxisStopBuffer() {
+  const hidden = getHiddenBoardDistances();
+  if (edgeScroll.dx < 0 && hidden.left <= AUTOSCROLL_STOP_BUFFER) edgeScroll.dx = 0;
+  if (edgeScroll.dx > 0 && hidden.right <= AUTOSCROLL_STOP_BUFFER) edgeScroll.dx = 0;
+  if (edgeScroll.dy < 0 && hidden.up <= AUTOSCROLL_STOP_BUFFER) edgeScroll.dy = 0;
+  if (edgeScroll.dy > 0 && hidden.down <= AUTOSCROLL_STOP_BUFFER) edgeScroll.dy = 0;
+}
+
+function updateEdgeScrollIntent(clientX, clientY) {
+  const prevX = edgeScroll.pointerX;
+  const prevY = edgeScroll.pointerY;
+  edgeScroll.pointerX = clientX;
+  edgeScroll.pointerY = clientY;
+
+  const moveX = prevX == null ? 0 : clientX - prevX;
+  const moveY = prevY == null ? 0 : clientY - prevY;
+
+  edgeScroll.moveX = Math.abs(moveX) >= AUTOSCROLL_DIRECTION_THRESHOLD ? moveX : 0;
+  edgeScroll.moveY = Math.abs(moveY) >= AUTOSCROLL_DIRECTION_THRESHOLD ? moveY : 0;
+
+  let dx = 0;
+  let dy = 0;
+
+  if (isDrawing && canvasContainer) {
+    const rect = getScrollViewportRect();
+    const hidden = getHiddenBoardDistances();
+    const distLeft = clientX - rect.left;
+    const distRight = rect.right - clientX;
+    const distTop = clientY - rect.top;
+    const distBottom = rect.bottom - clientY;
+
+    if (edgeScroll.moveX < 0 && hidden.left > AUTOSCROLL_STOP_BUFFER && distLeft <= AUTOSCROLL_EDGE_ZONE) {
+      dx = -getEdgeSpeed(distLeft);
+    } else if (edgeScroll.moveX > 0 && hidden.right > AUTOSCROLL_STOP_BUFFER && distRight <= AUTOSCROLL_EDGE_ZONE) {
+      dx = getEdgeSpeed(distRight);
+    }
+
+    if (edgeScroll.moveY < 0 && hidden.up > AUTOSCROLL_STOP_BUFFER && distTop <= AUTOSCROLL_EDGE_ZONE) {
+      dy = -getEdgeSpeed(distTop);
+    } else if (edgeScroll.moveY > 0 && hidden.down > AUTOSCROLL_STOP_BUFFER && distBottom <= AUTOSCROLL_EDGE_ZONE) {
+      dy = getEdgeSpeed(distBottom);
+    }
+  }
+
+  edgeScroll.dx = dx;
+  edgeScroll.dy = dy;
+  applyAxisStopBuffer();
+
+  if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
+    startEdgeScroll();
+  } else {
+    stopEdgeScroll();
+  }
+}
+
+function startEdgeScroll() {
+  if (!canvasContainer || edgeScroll.rafId) return;
+
+  const loop = () => {
+    if (!isDrawing || !canvasContainer) {
+      edgeScroll.rafId = null;
+      stopEdgeScroll(true);
+      return;
+    }
+
+    applyAxisStopBuffer();
+    const stepX = edgeScroll.dx;
+    const stepY = edgeScroll.dy;
+
+    if (stepX === 0 && stepY === 0) {
+      edgeScroll.rafId = null;
+      stopEdgeScroll(true);
+      return;
+    }
+
+    if (stepX !== 0) {
+      canvasContainer.scrollLeft += stepX;
+    }
+    if (stepY !== 0) {
+      canvasContainer.scrollTop += stepY;
+    }
+
+    if (edgeScroll.pointerX != null && edgeScroll.pointerY != null) {
+      extendActivePathAt(edgeScroll.pointerX, edgeScroll.pointerY);
+    }
+
+    edgeScroll.rafId = requestAnimationFrame(loop);
+  };
+
+  edgeScroll.rafId = requestAnimationFrame(loop);
+}
+
+function stopEdgeScroll(clearPointer = false) {
+  edgeScroll.dx = 0;
+  edgeScroll.dy = 0;
+
+  if (clearPointer) {
+    edgeScroll.moveX = 0;
+    edgeScroll.moveY = 0;
+    edgeScroll.pointerX = null;
+    edgeScroll.pointerY = null;
+  }
+
+  if (edgeScroll.rafId) {
+    cancelAnimationFrame(edgeScroll.rafId);
+    edgeScroll.rafId = null;
   }
 }
 
