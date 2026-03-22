@@ -750,6 +750,10 @@ function getEdgeSpeed(distanceToEdge) {
   return AUTOSCROLL_MAX_SPEED * (1 - clampedDistance / AUTOSCROLL_EDGE_ZONE);
 }
 
+function setAutoscrollPageMode(enabled) {
+  document.body.classList.toggle('force-scroll', enabled);
+}
+
 function applyAutoscrollStep(stepX, stepY) {
   let remainingX = stepX;
   let remainingY = stepY;
@@ -779,6 +783,11 @@ function applyAutoscrollStep(stepX, stepY) {
   }
 
   if (remainingX !== 0 || remainingY !== 0) {
+    const scroller = document.scrollingElement || document.documentElement;
+    if (scroller) {
+      scroller.scrollLeft += remainingX;
+      scroller.scrollTop += remainingY;
+    }
     window.scrollBy(remainingX, remainingY);
   }
 }
@@ -898,6 +907,7 @@ function updateEdgeScrollIntent(clientX, clientY) {
 
 function startEdgeScroll() {
   if (!canvasContainer || edgeScroll.rafId) return;
+  setAutoscrollPageMode(true);
 
   const loop = () => {
     if (!isDrawing || !canvasContainer) {
@@ -932,6 +942,7 @@ function startEdgeScroll() {
 function stopEdgeScroll(clearPointer = false) {
   edgeScroll.dx = 0;
   edgeScroll.dy = 0;
+  setAutoscrollPageMode(false);
 
   if (clearPointer) {
     edgeScroll.travelX = 0;
