@@ -362,6 +362,9 @@ canvas {
   display: flex;
   margin: 20px auto;
   width: 100%;
+  box-sizing: border-box;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: auto;
