@@ -104,7 +104,8 @@ const MOBILE_INITIAL_FIT = 0.94; // Leave a little slack so the board starts sli
 const AUTOSCROLL_EDGE_ZONE = 48;
 const AUTOSCROLL_STOP_BUFFER = 24;
 const AUTOSCROLL_DIRECTION_THRESHOLD = 2;
-const AUTOSCROLL_MAX_SPEED = 18;
+const AUTOSCROLL_AXIS_DOMINANCE_RATIO = 1.35;
+const AUTOSCROLL_MAX_SPEED = 10;
 const MIN_BOARD_SCALE = 0.5;
 const MAX_BOARD_SCALE = 3;
 const DOT_RADIUS_RATIO = 0.38;
@@ -832,14 +833,8 @@ function checkWin() {
 }
 
 function getScrollViewportRect() {
-  const vv = window.visualViewport;
-  if (vv) {
-    return {
-      left: 0,
-      top: 0,
-      right: vv.width,
-      bottom: vv.height
-    };
+  if (canvasContainer) {
+    return canvasContainer.getBoundingClientRect();
   }
   return {
     left: 0,
@@ -849,11 +844,10 @@ function getScrollViewportRect() {
   };
 }
 
-function getContainerHiddenDistances() {
+function getHiddenBoardDistances() {
   if (!canvasContainer) {
     return { left: 0, right: 0, up: 0, down: 0 };
   }
-
   return {
     left: canvasContainer.scrollLeft,
     right: Math.max(0, canvasContainer.scrollWidth - canvasContainer.clientWidth - canvasContainer.scrollLeft),
@@ -862,75 +856,16 @@ function getContainerHiddenDistances() {
   };
 }
 
-function getViewportHiddenDistances() {
-  const viewport = getScrollViewportRect();
-  const rect = canvas.getBoundingClientRect();
-
-  return {
-    left: Math.max(0, Math.round(viewport.left - rect.left)),
-    right: Math.max(0, Math.round(rect.right - viewport.right)),
-    up: Math.max(0, Math.round(viewport.top - rect.top)),
-    down: Math.max(0, Math.round(rect.bottom - viewport.bottom))
-  };
-}
-
-function getHiddenBoardDistances() {
-  const containerHidden = getContainerHiddenDistances();
-  const viewportHidden = getViewportHiddenDistances();
-
-  return {
-    left: Math.max(containerHidden.left, viewportHidden.left),
-    right: Math.max(containerHidden.right, viewportHidden.right),
-    up: Math.max(containerHidden.up, viewportHidden.up),
-    down: Math.max(containerHidden.down, viewportHidden.down)
-  };
-}
-
 function getEdgeSpeed(distanceToEdge) {
   const clampedDistance = Math.max(0, Math.min(distanceToEdge, AUTOSCROLL_EDGE_ZONE));
   return AUTOSCROLL_MAX_SPEED * (1 - clampedDistance / AUTOSCROLL_EDGE_ZONE);
 }
 
-function setAutoscrollPageMode(enabled) {
-  document.body.classList.toggle('force-scroll', enabled);
-}
-
 function applyAutoscrollStep(stepX, stepY) {
-  let remainingX = stepX;
-  let remainingY = stepY;
-
-  if (canvasContainer) {
-    const containerHidden = getContainerHiddenDistances();
-
-    if (remainingX < 0 && containerHidden.left > 0) {
-      const applied = -Math.min(Math.abs(remainingX), containerHidden.left);
-      canvasContainer.scrollLeft += applied;
-      remainingX -= applied;
-    } else if (remainingX > 0 && containerHidden.right > 0) {
-      const applied = Math.min(remainingX, containerHidden.right);
-      canvasContainer.scrollLeft += applied;
-      remainingX -= applied;
-    }
-
-    if (remainingY < 0 && containerHidden.up > 0) {
-      const applied = -Math.min(Math.abs(remainingY), containerHidden.up);
-      canvasContainer.scrollTop += applied;
-      remainingY -= applied;
-    } else if (remainingY > 0 && containerHidden.down > 0) {
-      const applied = Math.min(remainingY, containerHidden.down);
-      canvasContainer.scrollTop += applied;
-      remainingY -= applied;
-    }
-  }
-
-  if (remainingX !== 0 || remainingY !== 0) {
-    const scroller = document.scrollingElement || document.documentElement;
-    if (scroller) {
-      scroller.scrollLeft += remainingX;
-      scroller.scrollTop += remainingY;
-    }
-    window.scrollBy(remainingX, remainingY);
-  }
+  if (!canvasContainer) return;
+  canvasContainer.scrollLeft += stepX;
+  canvasContainer.scrollTop += stepY;
+  clampContainerScroll();
 }
 
 function applyAxisStopBuffer() {
@@ -959,6 +894,12 @@ function updateEdgeScrollIntent(clientX, clientY) {
     edgeScroll.travelY = Math.sign(edgeScroll.travelY) === Math.sign(moveY)
       ? edgeScroll.travelY + moveY
       : moveY;
+  }
+
+  if (Math.abs(edgeScroll.travelX) > Math.abs(edgeScroll.travelY) * AUTOSCROLL_AXIS_DOMINANCE_RATIO) {
+    edgeScroll.travelY = 0;
+  } else if (Math.abs(edgeScroll.travelY) > Math.abs(edgeScroll.travelX) * AUTOSCROLL_AXIS_DOMINANCE_RATIO) {
+    edgeScroll.travelX = 0;
   }
 
   edgeScroll.moveX = Math.abs(edgeScroll.travelX) >= AUTOSCROLL_DIRECTION_THRESHOLD ? edgeScroll.travelX : 0;
@@ -1048,7 +989,6 @@ function updateEdgeScrollIntent(clientX, clientY) {
 
 function startEdgeScroll() {
   if (!canvasContainer || edgeScroll.rafId) return;
-  setAutoscrollPageMode(true);
 
   const loop = () => {
     if (!isDrawing || !canvasContainer) {
@@ -1083,7 +1023,6 @@ function startEdgeScroll() {
 function stopEdgeScroll(clearPointer = false) {
   edgeScroll.dx = 0;
   edgeScroll.dy = 0;
-  setAutoscrollPageMode(false);
 
   if (clearPointer) {
     edgeScroll.travelX = 0;
