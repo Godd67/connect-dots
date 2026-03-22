@@ -1,7 +1,6 @@
 import { Grid } from './Grid.js';
 import { Generator } from './Generator.js';
 import { Random } from './Random.js';
-const SHOW_DEBUG = import.meta.env.VITE_SHOW_DEBUG === 'true';
 const APP_VERSION = '1.1.13';
 
 const canvas = document.getElementById('game-canvas');
@@ -21,7 +20,6 @@ const seedInput = document.getElementById('seed-input');
 const settingsModal = document.getElementById('settings-modal');
 const settingsOpenBtn = document.getElementById('settings-open-btn');
 const settingsCloseBtn = document.getElementById('settings-close-btn');
-const canvasContainer = document.querySelector('.canvas-container');
 
 const settingDefaultSize = document.getElementById('setting-default-size');
 const settingAspectRatio = document.getElementById('setting-aspect-ratio');
@@ -361,8 +359,6 @@ function init() {
     const started = handlePointerDown(touch);
     if (started && e.cancelable) {
       e.preventDefault();
-      canvas.style.touchAction = 'none'; // Lock browser scroll while drawing
-      document.body.classList.add('force-scroll');
     }
   };
 
@@ -373,7 +369,6 @@ function init() {
         activePathId = null;
         draw();
       }
-      stopEdgeScroll();
       return;
     }
     const touch = e.touches[0];
@@ -481,9 +476,6 @@ function handlePointerMove(e) {
   if (!isDrawing || !activePathId) return;
 
   const cell = getCellFromCoords(e.clientX, e.clientY);
-  if (isDrawing && !e.skipEdgeScroll) {
-    checkEdgeScroll(e);
-  }
   if (!cell) return;
 
   const [r, c] = cell;
@@ -591,8 +583,6 @@ function handlePointerUp() {
   isDrawing = false;
   activePathId = null;
   lastCell = null;
-  document.body.classList.remove('force-scroll');
-  stopEdgeScroll();
 }
 
 function checkWin() {
@@ -981,235 +971,6 @@ function drawDot(r, c, color, pathId) {
 }
 
 
-
-// ──────────────────────────────────────────────────────────
-// Mobile Edge-Drag Auto-Scroll
-// When a finger is close to a screen edge while drawing, we
-// automatically scroll the canvas container so the user can
-// reach dots that are off-screen without lifting their finger.
-// ──────────────────────────────────────────────────────────
-const EDGE_ZONE_V = 80;     // Vertical edge zone
-const EDGE_ZONE_H = 120;    // Horizontal edge zone (larger for side gestures)
-const MAX_SCROLL_SPEED = 20; // Slightly faster for smoother feel
-const edgeScroll = { rafId: null, dx: 0, dy: 0, active: false, lastX: 0, lastY: 0 };
-
-function getEdgeScrollTarget() {
-  if (canvasContainer) return canvasContainer;
-  return document.scrollingElement || document.documentElement;
-}
-
-function getAvailableScroll(target) {
-  if (!target) {
-    return { left: 0, right: 0, up: 0, down: 0 };
-  }
-
-  const maxLeft = Math.max(0, target.scrollWidth - target.clientWidth);
-  const maxTop = Math.max(0, target.scrollHeight - target.clientHeight);
-
-  return {
-    left: target.scrollLeft,
-    right: maxLeft - target.scrollLeft,
-    up: target.scrollTop,
-    down: maxTop - target.scrollTop
-  };
-}
-
-function clampAxisDelta(delta, negativeLimit, positiveLimit) {
-  if (delta < 0) return -Math.min(Math.abs(delta), negativeLimit);
-  if (delta > 0) return Math.min(delta, positiveLimit);
-  return 0;
-}
-
-function checkEdgeScroll(touch) {
-  // Use visualViewport for absolute screen edges even when zoomed
-  const vv = window.visualViewport;
-  const vw = vv ? vv.width : window.innerWidth;
-  const vh = vv ? vv.height : window.innerHeight;
-  const scrollTarget = getEdgeScrollTarget();
-  const available = getAvailableScroll(scrollTarget);
-
-  const x = touch.clientX;
-  const y = touch.clientY;
-
-  let dx = 0;
-  let dy = 0;
-
-  if (x < EDGE_ZONE_H) {
-    dx = -MAX_SCROLL_SPEED * (1 - x / EDGE_ZONE_H) * 1.5;
-  } else if (x > vw - EDGE_ZONE_H) {
-    dx = MAX_SCROLL_SPEED * (1 - (vw - x) / EDGE_ZONE_H) * 1.5;
-  }
-
-  if (y < EDGE_ZONE_V) {
-    dy = -MAX_SCROLL_SPEED * (1 - y / EDGE_ZONE_V) * 1.5;
-  } else if (y > vh - EDGE_ZONE_V) {
-    dy = MAX_SCROLL_SPEED * (1 - (vh - y) / EDGE_ZONE_V) * 1.5;
-  }
-
-  dx = clampAxisDelta(dx, available.left, available.right);
-  dy = clampAxisDelta(dy, available.up, available.down);
-
-  edgeScroll.dx = dx;
-  edgeScroll.dy = dy;
-  edgeScroll.lastX = x;
-  edgeScroll.lastY = y;
-  if (SHOW_DEBUG) {
-    updateDebugDot(x, y);
-    updateDebugLog(x, y, vw, vh, dx, dy);
-  }
-
-  if (dx !== 0 || dy !== 0) {
-    if (SHOW_DEBUG) {
-      showEdgeIndicator(dx, dy);
-    }
-    if (!edgeScroll.active) {
-      edgeScroll.active = true;
-    }
-    if (!edgeScroll.rafId) {
-      const loop = () => {
-        if (edgeScroll.dx !== 0 || edgeScroll.dy !== 0) {
-          const target = getEdgeScrollTarget();
-          const limits = getAvailableScroll(target);
-          const stepX = clampAxisDelta(edgeScroll.dx, limits.left, limits.right);
-          const stepY = clampAxisDelta(edgeScroll.dy, limits.up, limits.down);
-
-          if (stepX !== 0 || stepY !== 0) {
-            target.scrollLeft += stepX;
-            target.scrollTop += stepY;
-
-            handlePointerMove({
-              clientX: edgeScroll.lastX,
-              clientY: edgeScroll.lastY,
-              skipEdgeScroll: true
-            });
-          }
-
-          if (SHOW_DEBUG) {
-            updateDebugLog(edgeScroll.lastX, edgeScroll.lastY, vw, vh, stepX, stepY, stepX !== 0, stepY !== 0);
-          }
-
-          if (stepX === 0 && stepY === 0) {
-            stopEdgeScroll();
-          } else {
-            edgeScroll.rafId = requestAnimationFrame(loop);
-          }
-        } else {
-          edgeScroll.rafId = null;
-        }
-      };
-      edgeScroll.rafId = requestAnimationFrame(loop);
-    }
-  } else {
-    stopEdgeScroll();
-  }
-}
-
-function updateDebugLog(x, y, vw, vh, dx, dy, sX, sY) {
-  if (!SHOW_DEBUG) return;
-  let log = document.getElementById('debug-log');
-  if (!log) {
-    log = document.createElement('div');
-    log.id = 'debug-log';
-    log.style.position = 'fixed';
-    log.style.top = '5px';
-    log.style.left = '5px';
-    log.style.backgroundColor = 'rgba(0,0,0,0.7)';
-    log.style.color = '#0f0';
-    log.style.padding = '5px';
-    log.style.fontSize = '10px';
-    log.style.fontFamily = 'monospace';
-    log.style.zIndex = '10001';
-    log.style.pointerEvents = 'none';
-    document.body.appendChild(log);
-  }
-  const scX = window.scrollX || document.documentElement.scrollLeft;
-  const scY = window.scrollY || document.documentElement.scrollTop;
-  const cScX = canvasContainer ? canvasContainer.scrollLeft : 0;
-  const cScY = canvasContainer ? canvasContainer.scrollTop : 0;
-
-  const vv = window.visualViewport;
-  log.innerHTML = `V: 1.1.13 | Draw: ${isDrawing}<br>
-                   Touch: ${Math.round(x)}, ${Math.round(y)}<br>
-                   WinScroll: ${Math.round(scX)}, ${Math.round(scY)}<br>
-                   ContScroll: ${Math.round(cScX)}, ${Math.round(cScY)}<br>
-                   Dims: ${canvasContainer ? canvasContainer.scrollWidth : 0} / ${canvasContainer ? canvasContainer.clientWidth : 0}<br>
-                   Scale: ${vv ? vv.scale.toFixed(2) : 1.0}<br>
-                   Speed: ${dx.toFixed(1)}, ${dy.toFixed(1)}<br>
-                   Scrolled: ${sX ? 'X' : '-'}${sY ? 'Y' : '-'}`;
-}
-
-function updateDebugDot(x, y) {
-  if (!SHOW_DEBUG) return;
-  let dot = document.getElementById('debug-dot');
-  if (!dot) {
-    dot = document.createElement('div');
-    dot.id = 'debug-dot';
-    dot.style.position = 'fixed';
-    dot.style.width = '10px';
-    dot.style.height = '10px';
-    dot.style.background = 'red';
-    dot.style.borderRadius = '50%';
-    dot.style.pointerEvents = 'none';
-    dot.style.zIndex = '10000';
-    dot.style.display = 'none';
-    document.body.appendChild(dot);
-  }
-  if (isDrawing) {
-    dot.style.display = 'block';
-    dot.style.left = (x - 5) + 'px';
-    dot.style.top = (y - 5) + 'px';
-  } else {
-    dot.style.display = 'none';
-  }
-}
-
-function showEdgeIndicator(dx, dy) {
-  let indicator = document.getElementById('edge-indicator');
-  if (!indicator) {
-    indicator = document.createElement('div');
-    indicator.id = 'edge-indicator';
-    indicator.style.position = 'fixed';
-    indicator.style.top = '0';
-    indicator.style.left = '0';
-    indicator.style.width = '100vw';
-    indicator.style.height = '100vh';
-    indicator.style.pointerEvents = 'none';
-    indicator.style.zIndex = '9999';
-    indicator.style.transition = 'box-shadow 0.1s';
-    document.body.appendChild(indicator);
-  }
-
-  let shadow = '';
-  const color = 'rgba(64, 156, 255, 0.5)'; // Brighter blue
-  const size = '50px';
-  if (dy < 0) shadow += `inset 0 ${size} ${size} -${size} ${color}, `;
-  if (dy > 0) shadow += `inset 0 -${size} ${size} -${size} ${color}, `;
-  if (dx < 0) shadow += `inset ${size} 0 ${size} -${size} ${color}, `;
-  if (dx > 0) shadow += `inset -${size} 0 ${size} -${size} ${color}, `;
-
-  indicator.style.boxShadow = shadow.trim().replace(/,$/, '');
-}
-
-function stopEdgeScroll() {
-  edgeScroll.dx = 0;
-  edgeScroll.dy = 0;
-  edgeScroll.active = false;
-  // Note: touchAction is restored in handlePointerUp, not here,
-  // to prevent standard scroll from kicking in while still drawing.
-  const indicator = document.getElementById('edge-indicator');
-  if (indicator) indicator.style.boxShadow = 'none';
-  if (SHOW_DEBUG) {
-    const dot = document.getElementById('debug-dot');
-    if (dot) dot.style.display = 'none';
-    const log = document.getElementById('debug-log');
-    if (log) log.style.display = 'none';
-  }
-
-  if (edgeScroll.rafId) {
-    cancelAnimationFrame(edgeScroll.rafId);
-    edgeScroll.rafId = null;
-  }
-}
 
 async function forceUpdate() {
   if ('serviceWorker' in navigator) {

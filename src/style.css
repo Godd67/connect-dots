@@ -132,14 +132,7 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  overflow: auto; /* Ensure scrolling is allowed at the root */
-}
-
-/* "Hyper-Force" expansion: Ensures browser allows programmatic scrolling even if content fits. */
-body.force-scroll {
-  min-width: 150vw;
-  min-height: 150vh;
-  overflow: scroll !important; /* Force scrollbars to be ready */
+  overflow: auto;
 }
 
 #app {
