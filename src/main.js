@@ -103,7 +103,7 @@ const MIN_MOBILE_CELL_SIZE = 12; // Allow large boards to fit within the initial
 const MOBILE_INITIAL_FIT = 0.94; // Leave a little slack so the board starts slightly narrower than the screen
 const AUTOSCROLL_EDGE_ZONE = 48;
 const AUTOSCROLL_STOP_BUFFER = 24;
-const AUTOSCROLL_DIRECTION_THRESHOLD = 6;
+const AUTOSCROLL_DIRECTION_THRESHOLD = 2;
 const AUTOSCROLL_MAX_SPEED = 18;
 const DOT_RADIUS_RATIO = 0.38;
 const PADDING = 20;
@@ -119,6 +119,8 @@ const edgeScroll = {
   dy: 0,
   pointerX: null,
   pointerY: null,
+  travelX: 0,
+  travelY: 0,
   moveX: 0,
   moveY: 0
 };
@@ -160,6 +162,7 @@ function updateAutoscrollDebug(details) {
     `draw:${isDrawing} path:${activePathId ?? '-'}`,
     `ptr:${details.clientX ?? '-'},${details.clientY ?? '-'}`,
     `move:${details.moveX ?? 0},${details.moveY ?? 0}`,
+    `travel:${details.travelX ?? 0},${details.travelY ?? 0}`,
     `edge:${details.distLeft ?? '-'} ${details.distRight ?? '-'} ${details.distTop ?? '-'} ${details.distBottom ?? '-'}`,
     `hidden:${details.hiddenLeft ?? 0} ${details.hiddenRight ?? 0} ${details.hiddenUp ?? 0} ${details.hiddenDown ?? 0}`,
     `scroll:${details.dx ?? 0} ${details.dy ?? 0}`,
@@ -523,6 +526,8 @@ function handlePointerDown(e) {
       lastCell = cell;
       edgeScroll.pointerX = e.clientX;
       edgeScroll.pointerY = e.clientY;
+      edgeScroll.travelX = 0;
+      edgeScroll.travelY = 0;
       edgeScroll.moveX = 0;
       edgeScroll.moveY = 0;
       draw();
@@ -732,8 +737,19 @@ function updateEdgeScrollIntent(clientX, clientY) {
   const moveX = prevX == null ? 0 : clientX - prevX;
   const moveY = prevY == null ? 0 : clientY - prevY;
 
-  edgeScroll.moveX = Math.abs(moveX) >= AUTOSCROLL_DIRECTION_THRESHOLD ? moveX : 0;
-  edgeScroll.moveY = Math.abs(moveY) >= AUTOSCROLL_DIRECTION_THRESHOLD ? moveY : 0;
+  if (moveX !== 0) {
+    edgeScroll.travelX = Math.sign(edgeScroll.travelX) === Math.sign(moveX)
+      ? edgeScroll.travelX + moveX
+      : moveX;
+  }
+  if (moveY !== 0) {
+    edgeScroll.travelY = Math.sign(edgeScroll.travelY) === Math.sign(moveY)
+      ? edgeScroll.travelY + moveY
+      : moveY;
+  }
+
+  edgeScroll.moveX = Math.abs(edgeScroll.travelX) >= AUTOSCROLL_DIRECTION_THRESHOLD ? edgeScroll.travelX : 0;
+  edgeScroll.moveY = Math.abs(edgeScroll.travelY) >= AUTOSCROLL_DIRECTION_THRESHOLD ? edgeScroll.travelY : 0;
 
   let dx = 0;
   let dy = 0;
@@ -801,6 +817,8 @@ function updateEdgeScrollIntent(clientX, clientY) {
     clientY: Math.round(clientY),
     moveX: Math.round(edgeScroll.moveX),
     moveY: Math.round(edgeScroll.moveY),
+    travelX: Math.round(edgeScroll.travelX),
+    travelY: Math.round(edgeScroll.travelY),
     distLeft,
     distRight,
     distTop,
@@ -858,6 +876,8 @@ function stopEdgeScroll(clearPointer = false) {
   edgeScroll.dy = 0;
 
   if (clearPointer) {
+    edgeScroll.travelX = 0;
+    edgeScroll.travelY = 0;
     edgeScroll.moveX = 0;
     edgeScroll.moveY = 0;
     edgeScroll.pointerX = null;
