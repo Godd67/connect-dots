@@ -573,7 +573,7 @@ function init() {
     }
   };
 
-  canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvasContainer.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
   window.addEventListener('touchend', onTouchEnd);
   window.addEventListener('touchcancel', onTouchEnd);
@@ -623,8 +623,12 @@ function updateTitle(isWin) {
 
 function getCellFromCoords(x, y) {
   const rect = canvas.getBoundingClientRect();
-  const canvasX = x - rect.left - PADDING;
-  const canvasY = y - rect.top - PADDING;
+  const logicalWidth = canvas.width / dpr;
+  const logicalHeight = canvas.height / dpr;
+  const scaleX = rect.width > 0 ? logicalWidth / rect.width : 1;
+  const scaleY = rect.height > 0 ? logicalHeight / rect.height : 1;
+  const canvasX = (x - rect.left) * scaleX - PADDING;
+  const canvasY = (y - rect.top) * scaleY - PADDING;
 
   const c = Math.floor(canvasX / CELL_SIZE);
   const r = Math.floor(canvasY / CELL_SIZE);
