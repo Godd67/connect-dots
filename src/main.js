@@ -26,6 +26,8 @@ const settingDefaultSize = document.getElementById('setting-default-size');
 const settingAspectRatio = document.getElementById('setting-aspect-ratio');
 const settingApplause = document.getElementById('setting-applause');
 const settingNav = document.getElementById('setting-nav');
+const debugParams = new URLSearchParams(window.location.search);
+const AUTOSCROLL_DEBUG = debugParams.has('debug_autoscroll') || localStorage.getItem('dots-debug-autoscroll') === '1';
 
 const ASPECT_RATIOS = {
   '1:1': 1,
@@ -149,6 +151,42 @@ function showToast(message, durationMs = 2500) {
   toast.classList.add('visible');
   clearTimeout(toast._hideTimer);
   toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), durationMs);
+}
+
+function updateAutoscrollDebug(details) {
+  if (!AUTOSCROLL_DEBUG) return;
+
+  const lines = [
+    `draw:${isDrawing} path:${activePathId ?? '-'}`,
+    `ptr:${details.clientX ?? '-'},${details.clientY ?? '-'}`,
+    `move:${details.moveX ?? 0},${details.moveY ?? 0}`,
+    `edge:${details.distLeft ?? '-'} ${details.distRight ?? '-'} ${details.distTop ?? '-'} ${details.distBottom ?? '-'}`,
+    `hidden:${details.hiddenLeft ?? 0} ${details.hiddenRight ?? 0} ${details.hiddenUp ?? 0} ${details.hiddenDown ?? 0}`,
+    `scroll:${details.dx ?? 0} ${details.dy ?? 0}`,
+    `reason:${details.reason ?? '-'}`
+  ];
+
+  let panel = document.getElementById('autoscroll-debug');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'autoscroll-debug';
+    panel.style.position = 'fixed';
+    panel.style.left = '8px';
+    panel.style.bottom = '8px';
+    panel.style.zIndex = '10002';
+    panel.style.pointerEvents = 'none';
+    panel.style.background = 'rgba(0, 0, 0, 0.78)';
+    panel.style.color = '#8ef58e';
+    panel.style.font = '12px/1.35 monospace';
+    panel.style.padding = '8px 10px';
+    panel.style.borderRadius = '8px';
+    panel.style.whiteSpace = 'pre-line';
+    panel.style.maxWidth = 'calc(100vw - 16px)';
+    document.body.appendChild(panel);
+  }
+
+  panel.textContent = lines.join('\n');
+  console.debug('[autoscroll]', details);
 }
 
 function playApplause() {
@@ -699,25 +737,52 @@ function updateEdgeScrollIntent(clientX, clientY) {
 
   let dx = 0;
   let dy = 0;
+  let reason = 'inactive';
+  let distLeft = null;
+  let distRight = null;
+  let distTop = null;
+  let distBottom = null;
+  let hidden = { left: 0, right: 0, up: 0, down: 0 };
 
   if (isDrawing && canvasContainer) {
     const rect = getScrollViewportRect();
-    const hidden = getHiddenBoardDistances();
-    const distLeft = clientX - rect.left;
-    const distRight = rect.right - clientX;
-    const distTop = clientY - rect.top;
-    const distBottom = rect.bottom - clientY;
+    hidden = getHiddenBoardDistances();
+    distLeft = Math.round(clientX - rect.left);
+    distRight = Math.round(rect.right - clientX);
+    distTop = Math.round(clientY - rect.top);
+    distBottom = Math.round(rect.bottom - clientY);
+    reason = 'eligible';
 
     if (edgeScroll.moveX < 0 && hidden.left > AUTOSCROLL_STOP_BUFFER && distLeft <= AUTOSCROLL_EDGE_ZONE) {
       dx = -getEdgeSpeed(distLeft);
+      reason = 'scroll-left';
     } else if (edgeScroll.moveX > 0 && hidden.right > AUTOSCROLL_STOP_BUFFER && distRight <= AUTOSCROLL_EDGE_ZONE) {
       dx = getEdgeSpeed(distRight);
+      reason = 'scroll-right';
     }
 
     if (edgeScroll.moveY < 0 && hidden.up > AUTOSCROLL_STOP_BUFFER && distTop <= AUTOSCROLL_EDGE_ZONE) {
       dy = -getEdgeSpeed(distTop);
+      reason = dx !== 0 ? `${reason}+up` : 'scroll-up';
     } else if (edgeScroll.moveY > 0 && hidden.down > AUTOSCROLL_STOP_BUFFER && distBottom <= AUTOSCROLL_EDGE_ZONE) {
       dy = getEdgeSpeed(distBottom);
+      reason = dx !== 0 ? `${reason}+down` : 'scroll-down';
+    }
+
+    if (dx === 0 && dy === 0) {
+      if (edgeScroll.moveX === 0 && edgeScroll.moveY === 0) {
+        reason = 'movement-too-small';
+      } else if (edgeScroll.moveX < 0 && hidden.left <= AUTOSCROLL_STOP_BUFFER) {
+        reason = 'left-visible';
+      } else if (edgeScroll.moveX > 0 && hidden.right <= AUTOSCROLL_STOP_BUFFER) {
+        reason = 'right-visible';
+      } else if (edgeScroll.moveY < 0 && hidden.up <= AUTOSCROLL_STOP_BUFFER) {
+        reason = 'top-visible';
+      } else if (edgeScroll.moveY > 0 && hidden.down <= AUTOSCROLL_STOP_BUFFER) {
+        reason = 'bottom-visible';
+      } else {
+        reason = 'not-near-edge';
+      }
     }
   }
 
@@ -730,6 +795,24 @@ function updateEdgeScrollIntent(clientX, clientY) {
   } else {
     stopEdgeScroll();
   }
+
+  updateAutoscrollDebug({
+    clientX: Math.round(clientX),
+    clientY: Math.round(clientY),
+    moveX: Math.round(edgeScroll.moveX),
+    moveY: Math.round(edgeScroll.moveY),
+    distLeft,
+    distRight,
+    distTop,
+    distBottom,
+    hiddenLeft: Math.round(hidden.left),
+    hiddenRight: Math.round(hidden.right),
+    hiddenUp: Math.round(hidden.up),
+    hiddenDown: Math.round(hidden.down),
+    dx: Math.round(edgeScroll.dx),
+    dy: Math.round(edgeScroll.dy),
+    reason
+  });
 }
 
 function startEdgeScroll() {
@@ -748,6 +831,7 @@ function startEdgeScroll() {
 
     if (stepX === 0 && stepY === 0) {
       edgeScroll.rafId = null;
+      updateAutoscrollDebug({ reason: 'loop-stop-buffer', dx: 0, dy: 0 });
       stopEdgeScroll(true);
       return;
     }
@@ -783,6 +867,10 @@ function stopEdgeScroll(clearPointer = false) {
   if (edgeScroll.rafId) {
     cancelAnimationFrame(edgeScroll.rafId);
     edgeScroll.rafId = null;
+  }
+
+  if (clearPointer) {
+    updateAutoscrollDebug({ reason: 'stopped', dx: 0, dy: 0 });
   }
 }
 
