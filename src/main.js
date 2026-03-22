@@ -691,8 +691,14 @@ function checkWin() {
 }
 
 function getScrollViewportRect() {
-  if (canvasContainer) {
-    return canvasContainer.getBoundingClientRect();
+  const vv = window.visualViewport;
+  if (vv) {
+    return {
+      left: 0,
+      top: 0,
+      right: vv.width,
+      bottom: vv.height
+    };
   }
   return {
     left: 0,
@@ -702,7 +708,7 @@ function getScrollViewportRect() {
   };
 }
 
-function getHiddenBoardDistances() {
+function getContainerHiddenDistances() {
   if (!canvasContainer) {
     return { left: 0, right: 0, up: 0, down: 0 };
   }
@@ -715,9 +721,66 @@ function getHiddenBoardDistances() {
   };
 }
 
+function getViewportHiddenDistances() {
+  const viewport = getScrollViewportRect();
+  const rect = canvas.getBoundingClientRect();
+
+  return {
+    left: Math.max(0, Math.round(viewport.left - rect.left)),
+    right: Math.max(0, Math.round(rect.right - viewport.right)),
+    up: Math.max(0, Math.round(viewport.top - rect.top)),
+    down: Math.max(0, Math.round(rect.bottom - viewport.bottom))
+  };
+}
+
+function getHiddenBoardDistances() {
+  const containerHidden = getContainerHiddenDistances();
+  const viewportHidden = getViewportHiddenDistances();
+
+  return {
+    left: Math.max(containerHidden.left, viewportHidden.left),
+    right: Math.max(containerHidden.right, viewportHidden.right),
+    up: Math.max(containerHidden.up, viewportHidden.up),
+    down: Math.max(containerHidden.down, viewportHidden.down)
+  };
+}
+
 function getEdgeSpeed(distanceToEdge) {
   const clampedDistance = Math.max(0, Math.min(distanceToEdge, AUTOSCROLL_EDGE_ZONE));
   return AUTOSCROLL_MAX_SPEED * (1 - clampedDistance / AUTOSCROLL_EDGE_ZONE);
+}
+
+function applyAutoscrollStep(stepX, stepY) {
+  let remainingX = stepX;
+  let remainingY = stepY;
+
+  if (canvasContainer) {
+    const containerHidden = getContainerHiddenDistances();
+
+    if (remainingX < 0 && containerHidden.left > 0) {
+      const applied = -Math.min(Math.abs(remainingX), containerHidden.left);
+      canvasContainer.scrollLeft += applied;
+      remainingX -= applied;
+    } else if (remainingX > 0 && containerHidden.right > 0) {
+      const applied = Math.min(remainingX, containerHidden.right);
+      canvasContainer.scrollLeft += applied;
+      remainingX -= applied;
+    }
+
+    if (remainingY < 0 && containerHidden.up > 0) {
+      const applied = -Math.min(Math.abs(remainingY), containerHidden.up);
+      canvasContainer.scrollTop += applied;
+      remainingY -= applied;
+    } else if (remainingY > 0 && containerHidden.down > 0) {
+      const applied = Math.min(remainingY, containerHidden.down);
+      canvasContainer.scrollTop += applied;
+      remainingY -= applied;
+    }
+  }
+
+  if (remainingX !== 0 || remainingY !== 0) {
+    window.scrollBy(remainingX, remainingY);
+  }
 }
 
 function applyAxisStopBuffer() {
@@ -854,12 +917,7 @@ function startEdgeScroll() {
       return;
     }
 
-    if (stepX !== 0) {
-      canvasContainer.scrollLeft += stepX;
-    }
-    if (stepY !== 0) {
-      canvasContainer.scrollTop += stepY;
-    }
+    applyAutoscrollStep(stepX, stepY);
 
     if (edgeScroll.pointerX != null && edgeScroll.pointerY != null) {
       extendActivePathAt(edgeScroll.pointerX, edgeScroll.pointerY);
