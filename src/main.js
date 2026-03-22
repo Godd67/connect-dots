@@ -105,6 +105,8 @@ const AUTOSCROLL_EDGE_ZONE = 48;
 const AUTOSCROLL_STOP_BUFFER = 24;
 const AUTOSCROLL_DIRECTION_THRESHOLD = 2;
 const AUTOSCROLL_MAX_SPEED = 18;
+const MIN_BOARD_SCALE = 0.5;
+const MAX_BOARD_SCALE = 3;
 const DOT_RADIUS_RATIO = 0.38;
 const PADDING = 20;
 
@@ -113,6 +115,15 @@ const dpr = window.devicePixelRatio || 1;
 // Dynamic values (recalculated on generate)
 let CELL_SIZE = DEFAULT_CELL_SIZE;
 let DOT_RADIUS = CELL_SIZE * DOT_RADIUS_RATIO;
+let boardScale = 1;
+let boardBaseWidth = 0;
+let boardBaseHeight = 0;
+let isPanningBoard = false;
+let panStartX = 0;
+let panStartY = 0;
+let panStartScrollLeft = 0;
+let panStartScrollTop = 0;
+let pinchGesture = null;
 const edgeScroll = {
   rafId: null,
   dx: 0,
@@ -255,6 +266,68 @@ function calculateCellSize(cols, rows) {
   const cellH = Math.floor(maxHeight / rows);
   const bestFit = Math.min(cellW, cellH);
   return Math.max(MIN_MOBILE_CELL_SIZE, Math.min(bestFit, DEFAULT_CELL_SIZE));
+}
+
+function getTouchDistance(touches) {
+  if (touches.length < 2) return 0;
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+function getTouchMidpoint(touches) {
+  return {
+    x: (touches[0].clientX + touches[1].clientX) / 2,
+    y: (touches[0].clientY + touches[1].clientY) / 2
+  };
+}
+
+function clampBoardScale(scale) {
+  return Math.max(MIN_BOARD_SCALE, Math.min(MAX_BOARD_SCALE, scale));
+}
+
+function clampContainerScroll() {
+  if (!canvasContainer) return;
+  const maxLeft = Math.max(0, canvasContainer.scrollWidth - canvasContainer.clientWidth);
+  const maxTop = Math.max(0, canvasContainer.scrollHeight - canvasContainer.clientHeight);
+  canvasContainer.scrollLeft = Math.max(0, Math.min(canvasContainer.scrollLeft, maxLeft));
+  canvasContainer.scrollTop = Math.max(0, Math.min(canvasContainer.scrollTop, maxTop));
+}
+
+function applyBoardScale(nextScale, anchorClientX = null, anchorClientY = null) {
+  const clampedScale = clampBoardScale(nextScale);
+  if (clampedScale === boardScale) return;
+
+  let anchorOffsetX = null;
+  let anchorOffsetY = null;
+  let anchorContentX = null;
+  let anchorContentY = null;
+
+  if (canvasContainer && anchorClientX != null && anchorClientY != null) {
+    const rect = canvasContainer.getBoundingClientRect();
+    anchorOffsetX = anchorClientX - rect.left;
+    anchorOffsetY = anchorClientY - rect.top;
+    anchorContentX = canvasContainer.scrollLeft + anchorOffsetX;
+    anchorContentY = canvasContainer.scrollTop + anchorOffsetY;
+  }
+
+  const previousScale = boardScale;
+  boardScale = clampedScale;
+  updateCanvasDisplaySize();
+
+  if (canvasContainer && anchorContentX != null && anchorContentY != null) {
+    const ratio = boardScale / previousScale;
+    canvasContainer.scrollLeft = anchorContentX * ratio - anchorOffsetX;
+    canvasContainer.scrollTop = anchorContentY * ratio - anchorOffsetY;
+  }
+
+  clampContainerScroll();
+}
+
+function updateCanvasDisplaySize() {
+  if (!boardBaseWidth || !boardBaseHeight) return;
+  canvas.style.width = `${Math.round(boardBaseWidth * boardScale)}px`;
+  canvas.style.height = `${Math.round(boardBaseHeight * boardScale)}px`;
 }
 
 function init() {
@@ -422,43 +495,88 @@ function init() {
   const onTouchStart = (e) => {
     redoStack = [];
     prevUserPaths = JSON.stringify(userPaths);
-    if (e.touches.length > 1) {
+    if (e.touches.length === 2) {
       if (isDrawing) {
         isDrawing = false;
         activePathId = null;
         draw();
       }
+      isPanningBoard = false;
+      pinchGesture = {
+        startDistance: getTouchDistance(e.touches),
+        startScale: boardScale
+      };
       stopEdgeScroll(true);
+      if (e.cancelable) e.preventDefault();
       return;
     }
+    if (e.touches.length > 2) return;
+
     const touch = e.touches[0];
     const started = handlePointerDown(touch);
     if (started && e.cancelable) {
       e.preventDefault();
+      return;
     }
+    isPanningBoard = true;
+    panStartX = touch.clientX;
+    panStartY = touch.clientY;
+    panStartScrollLeft = canvasContainer ? canvasContainer.scrollLeft : 0;
+    panStartScrollTop = canvasContainer ? canvasContainer.scrollTop : 0;
   };
 
   const onTouchMove = (e) => {
-    if (e.touches.length > 1) {
+    if (e.touches.length === 2) {
       if (isDrawing) {
         isDrawing = false;
         activePathId = null;
         draw();
       }
+      isPanningBoard = false;
+      if (!pinchGesture) {
+        pinchGesture = {
+          startDistance: getTouchDistance(e.touches),
+          startScale: boardScale
+        };
+      }
+      const distance = getTouchDistance(e.touches);
+      if (pinchGesture.startDistance > 0) {
+        const midpoint = getTouchMidpoint(e.touches);
+        applyBoardScale(pinchGesture.startScale * (distance / pinchGesture.startDistance), midpoint.x, midpoint.y);
+      }
       stopEdgeScroll(true);
+      if (e.cancelable) e.preventDefault();
       return;
     }
+    pinchGesture = null;
+    if (e.touches.length > 1) return;
+
     const touch = e.touches[0];
     if (isDrawing) {
       if (e.cancelable) e.preventDefault();
       handlePointerMove(touch);
+    } else if (isPanningBoard && canvasContainer) {
+      if (e.cancelable) e.preventDefault();
+      canvasContainer.scrollLeft = panStartScrollLeft - (touch.clientX - panStartX);
+      canvasContainer.scrollTop = panStartScrollTop - (touch.clientY - panStartY);
+      clampContainerScroll();
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if (pinchGesture && (!e || e.touches?.length < 2)) {
+      pinchGesture = null;
+    }
+    if (!e || e.touches?.length === 0) {
+      isPanningBoard = false;
+      handlePointerUp();
     }
   };
 
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
-  window.addEventListener('touchend', (e) => { handlePointerUp(e); });
-  window.addEventListener('touchcancel', (e) => { handlePointerUp(e); });
+  window.addEventListener('touchend', onTouchEnd);
+  window.addEventListener('touchcancel', onTouchEnd);
 
   // Populate build info version number
   if (buildInfoEl) {
@@ -990,8 +1108,11 @@ function resetGameState() {
   redoStack = [];
   updateUndoRedoButtons();
   isDrawing = false;
+  isPanningBoard = false;
+  pinchGesture = null;
   activePathId = null;
   lastCell = null;
+  stopEdgeScroll(true);
   revealBtn.classList.remove('no-hint');
   revealBtn.innerHTML = `
     <svg id="hint-icon" viewBox="0 0 24 24" width="22" height="22">
@@ -1039,6 +1160,7 @@ function generate() {
 
   // Reset state and switch to a fresh empty grid immediately
   resetGameState();
+  boardScale = 1;
   grid = new Grid(cols, rows);
 
   const random = new Random(seed);
@@ -1087,14 +1209,15 @@ function draw() {
   const rows = grid.rows;
   const width = cols * CELL_SIZE + PADDING * 2;
   const height = rows * CELL_SIZE + PADDING * 2;
+  boardBaseWidth = width;
+  boardBaseHeight = height;
 
   // Handle High-DPI (Retina) scaling
   if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
     canvas.width = width * dpr;
     canvas.height = height * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
   }
+  updateCanvasDisplaySize();
 
   ctx.resetTransform();
   ctx.scale(dpr, dpr);

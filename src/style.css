@@ -355,7 +355,7 @@ canvas {
   background: #222;
   border-radius: 4px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  touch-action: auto;
+  touch-action: none;
   cursor: pointer;
   display: inline-block;
   margin: 0 auto;
@@ -374,6 +374,8 @@ canvas {
   align-items: flex-start;
   min-height: 200px;
   -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 /* Center the canvas within its flex container */
