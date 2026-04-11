@@ -34,6 +34,7 @@ const ASPECT_RATIOS = {
   '3:4': 4 / 3, // Height = Width * (4/3)
   '9:16': 16 / 9
 };
+const GAME_STATE_STORAGE_KEY = 'dots-game-state';
 
 // Settings Management
 const Settings = {
@@ -101,6 +102,7 @@ let seedDirty = false; // Track if user edited the seed input
 const DEFAULT_CELL_SIZE = 50;
 const MIN_MOBILE_CELL_SIZE = 12; // Allow large boards to fit within the initial mobile viewport
 const MOBILE_INITIAL_FIT = 0.94; // Leave a little slack so the board starts slightly narrower than the screen
+const MOBILE_EDGE_GUTTER = 56;
 const AUTOSCROLL_EDGE_ZONE = 48;
 const AUTOSCROLL_STOP_BUFFER = 24;
 const AUTOSCROLL_DIRECTION_THRESHOLD = 2;
@@ -136,6 +138,128 @@ const edgeScroll = {
   moveX: 0,
   moveY: 0
 };
+
+function cloneGridState(sourceGrid) {
+  return {
+    cols: sourceGrid.cols,
+    rows: sourceGrid.rows,
+    cells: sourceGrid.cells.map(row => [...row]),
+    paths: sourceGrid.paths.map(path => ({
+      ...path,
+      points: path.points.map(([r, c]) => [r, c])
+    }))
+  };
+}
+
+function cloneUserPathsState(sourcePaths) {
+  const cloned = {};
+  for (const [pathId, points] of Object.entries(sourcePaths || {})) {
+    cloned[pathId] = points.map(([r, c]) => [r, c]);
+  }
+  return cloned;
+}
+
+function cloneHistoryStack(stack) {
+  return Array.isArray(stack) ? [...stack] : [];
+}
+
+function configureBoardMetrics(cols, rows) {
+  CELL_SIZE = calculateCellSize(cols, rows);
+
+  const avgDim = (cols + rows) / 2;
+  const dynamicRatio = 0.28 + ((avgDim - 5) / 15) * 0.10;
+  DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
+}
+
+function saveGameState() {
+  if (!grid || !loadedSeed) return;
+
+  const snapshot = {
+    version: 1,
+    loadedSeed,
+    gridSize,
+    hardMode: hardModeBtn.classList.contains('active'),
+    seedDirty,
+    grid: cloneGridState(grid),
+    userPaths: cloneUserPathsState(userPaths),
+    undoStack: cloneHistoryStack(undoStack),
+    redoStack: cloneHistoryStack(redoStack)
+  };
+
+  try {
+    localStorage.setItem(GAME_STATE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (e) {
+    console.warn('Failed to persist game state', e);
+  }
+}
+
+function clearSavedGameState() {
+  try {
+    localStorage.removeItem(GAME_STATE_STORAGE_KEY);
+  } catch (e) {
+    console.warn('Failed to clear saved game state', e);
+  }
+}
+
+function restoreGameState() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(GAME_STATE_STORAGE_KEY);
+  } catch (e) {
+    console.warn('Failed to read saved game state', e);
+    return false;
+  }
+
+  if (!saved) return false;
+
+  try {
+    const snapshot = JSON.parse(saved);
+    const snapshotGrid = snapshot?.grid;
+    if (
+      !snapshotGrid ||
+      !Number.isInteger(snapshotGrid.cols) ||
+      !Number.isInteger(snapshotGrid.rows) ||
+      !Array.isArray(snapshotGrid.cells) ||
+      !Array.isArray(snapshotGrid.paths) ||
+      typeof snapshot.loadedSeed !== 'string'
+    ) {
+      clearSavedGameState();
+      return false;
+    }
+
+    gridSize = Number.isInteger(snapshot.gridSize) ? snapshot.gridSize : snapshotGrid.cols;
+    sizeDisplay.textContent = gridSize;
+    if (snapshot.hardMode) hardModeBtn.classList.add('active');
+    else hardModeBtn.classList.remove('active');
+
+    loadedSeed = snapshot.loadedSeed;
+    seedInput.value = loadedSeed;
+    seedDirty = Boolean(snapshot.seedDirty);
+
+    resetGameState();
+    boardScale = 1;
+    grid = new Grid(snapshotGrid.cols, snapshotGrid.rows);
+    grid.cells = snapshotGrid.cells.map(row => [...row]);
+    grid.paths = snapshotGrid.paths.map(path => ({
+      ...path,
+      points: path.points.map(([r, c]) => [r, c])
+    }));
+
+    userPaths = cloneUserPathsState(snapshot.userPaths);
+    undoStack = cloneHistoryStack(snapshot.undoStack);
+    redoStack = cloneHistoryStack(snapshot.redoStack);
+
+    configureBoardMetrics(grid.cols, grid.rows);
+    updateUndoRedoButtons();
+    draw();
+    checkWin();
+    return true;
+  } catch (e) {
+    console.warn('Saved game state is invalid, clearing it', e);
+    clearSavedGameState();
+    return false;
+  }
+}
 
 function isMobile() {
   // Check both width and user agent for better mobile/tablet detection
@@ -260,7 +384,7 @@ function calculateCellSize(cols, rows) {
   if (!isMobile()) return DEFAULT_CELL_SIZE;
   const availableWidth = document.documentElement.clientWidth || window.innerWidth;
   const availableHeight = document.documentElement.clientHeight || window.innerHeight;
-  const maxWidth = Math.floor((availableWidth - PADDING * 2 - 30) * MOBILE_INITIAL_FIT);
+  const maxWidth = Math.floor((availableWidth - PADDING * 2 - MOBILE_EDGE_GUTTER * 2 - 30) * MOBILE_INITIAL_FIT);
   const maxHeight = Math.floor((availableHeight - 200) * MOBILE_INITIAL_FIT); // Leave room for header/controls
 
   const cellW = Math.floor(maxWidth / cols);
@@ -434,6 +558,7 @@ function init() {
     undoStack = [];
     redoStack = [];
     updateUndoRedoButtons();
+    saveGameState();
     draw();
   });
 
@@ -442,6 +567,7 @@ function init() {
       redoStack.push(JSON.stringify(userPaths));
       userPaths = JSON.parse(undoStack.pop());
       updateUndoRedoButtons();
+      saveGameState();
       draw();
       checkWin();
     }
@@ -452,6 +578,7 @@ function init() {
       undoStack.push(JSON.stringify(userPaths));
       userPaths = JSON.parse(redoStack.pop());
       updateUndoRedoButtons();
+      saveGameState();
       draw();
       checkWin();
     }
@@ -484,7 +611,9 @@ function init() {
 
   // Mouse Events
   canvas.addEventListener('mousedown', (e) => {
+    const hadRedoHistory = redoStack.length > 0;
     redoStack = [];
+    if (hadRedoHistory) saveGameState();
     prevUserPaths = JSON.stringify(userPaths);
     handlePointerDown(e);
     updateUndoRedoButtons();
@@ -494,7 +623,9 @@ function init() {
 
   // Mobile Touch Events
   const onTouchStart = (e) => {
+    const hadRedoHistory = redoStack.length > 0;
     redoStack = [];
+    if (hadRedoHistory) saveGameState();
     prevUserPaths = JSON.stringify(userPaths);
     if (e.touches.length === 2) {
       if (isDrawing) {
@@ -585,8 +716,10 @@ function init() {
     buildInfoEl.textContent = `v${APP_VERSION}-${buildNum} (Tap to Update)`;
   }
 
-  // Initial generation
-  generate();
+  // Initial generation or restore
+  if (!restoreGameState()) {
+    generate();
+  }
   updateTitle(false);
   updateUndoRedoButtons();
 }
@@ -786,6 +919,7 @@ function handlePointerUp() {
           undoStack.push(prevUserPaths);
           updateUndoRedoButtons();
         }
+        saveGameState();
       }
     }
     checkWin();
@@ -827,8 +961,11 @@ function checkWin() {
 
   if (allConnected) {
     console.log("ALL PATHS CONNECTED!");
+    clearSavedGameState();
     updateTitle(true);
     playApplause();
+  } else {
+    updateTitle(false);
   }
 }
 
@@ -1109,12 +1246,7 @@ function generate() {
   const random = new Random(seed);
 
   // Recalculate dynamic sizing for mobile
-  CELL_SIZE = calculateCellSize(cols, rows);
-
-  // Make dot size relative to grid size (use average or max of dims)
-  const avgDim = (cols + rows) / 2;
-  const dynamicRatio = 0.28 + ((avgDim - 5) / 15) * 0.10;
-  DOT_RADIUS = CELL_SIZE * Math.min(0.38, Math.max(0.28, dynamicRatio));
+  configureBoardMetrics(cols, rows);
 
   generateBtn.disabled = true;
 
@@ -1133,12 +1265,15 @@ function generate() {
             if (grid.cells[r][c] === 0) grid.cells[r][c] = -1;
           }
         }
+        saveGameState();
         draw();
       } else {
         console.warn('Failed to generate valid board. Try again.');
+        clearSavedGameState();
       }
     } catch (e) {
       console.error("Generation crashed:", e);
+      clearSavedGameState();
     } finally {
       generateBtn.disabled = false;
     }

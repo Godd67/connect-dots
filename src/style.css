@@ -3,6 +3,7 @@
   --text-color: #f0f0f0;
   --accent-color: #646cff;
   --panel-bg: #2a2a2a;
+  --game-edge-gutter: 56px;
 }
 
 @keyframes jitter {
@@ -133,6 +134,7 @@ body {
   color: var(--text-color);
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   overflow: auto;
+  overscroll-behavior-x: none;
 }
 
 #app {
@@ -363,8 +365,8 @@ canvas {
   margin: 20px auto;
   width: 100%;
   box-sizing: border-box;
-  padding-left: max(24px, env(safe-area-inset-left));
-  padding-right: max(24px, env(safe-area-inset-right));
+  padding-left: max(var(--game-edge-gutter), env(safe-area-inset-left));
+  padding-right: max(var(--game-edge-gutter), env(safe-area-inset-right));
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: auto;
@@ -374,6 +376,7 @@ canvas {
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
   overscroll-behavior: contain;
+  overscroll-behavior-x: none;
 }
 
 /* Center the canvas within its flex container */
