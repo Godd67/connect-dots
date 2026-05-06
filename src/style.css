@@ -407,6 +407,10 @@ footer p {
 
 /* Mobile-specific styles */
 @media (max-width: 600px) {
+  :root {
+    --game-edge-gutter: 10px;
+  }
+
   #app {
     padding: 0.5rem;
   }

@@ -101,8 +101,9 @@ let seedDirty = false; // Track if user edited the seed input
 // Rendering constants
 const DEFAULT_CELL_SIZE = 50;
 const MIN_MOBILE_CELL_SIZE = 12; // Allow large boards to fit within the initial mobile viewport
-const MOBILE_INITIAL_FIT = 0.94; // Leave a little slack so the board starts slightly narrower than the screen
-const MOBILE_EDGE_GUTTER = 56;
+const MAX_MOBILE_CELL_SIZE = 72;
+const MOBILE_INITIAL_FIT = 0.98; // Keep only a small visual margin on initial mobile boards
+const MOBILE_SIDE_MARGIN = 10;
 const AUTOSCROLL_EDGE_ZONE = 48;
 const AUTOSCROLL_STOP_BUFFER = 24;
 const AUTOSCROLL_DIRECTION_THRESHOLD = 2;
@@ -383,14 +384,10 @@ function playApplause() {
 function calculateCellSize(cols, rows) {
   if (!isMobile()) return DEFAULT_CELL_SIZE;
   const availableWidth = document.documentElement.clientWidth || window.innerWidth;
-  const availableHeight = document.documentElement.clientHeight || window.innerHeight;
-  const maxWidth = Math.floor((availableWidth - PADDING * 2 - MOBILE_EDGE_GUTTER * 2 - 30) * MOBILE_INITIAL_FIT);
-  const maxHeight = Math.floor((availableHeight - 200) * MOBILE_INITIAL_FIT); // Leave room for header/controls
-
-  const cellW = Math.floor(maxWidth / cols);
-  const cellH = Math.floor(maxHeight / rows);
-  const bestFit = Math.min(cellW, cellH);
-  return Math.max(MIN_MOBILE_CELL_SIZE, Math.min(bestFit, DEFAULT_CELL_SIZE));
+  const maxBoardWidth = Math.max(0, availableWidth - MOBILE_SIDE_MARGIN * 2);
+  const maxGridWidth = Math.floor((maxBoardWidth - PADDING * 2) * MOBILE_INITIAL_FIT);
+  const widthFit = Math.floor(maxGridWidth / cols);
+  return Math.max(MIN_MOBILE_CELL_SIZE, Math.min(widthFit, MAX_MOBILE_CELL_SIZE));
 }
 
 function getTouchDistance(touches) {
