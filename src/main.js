@@ -384,6 +384,7 @@ function restoreGameState() {
     updateUndoRedoButtons();
     draw();
     checkWin();
+    updateModeIndicator();
     return true;
   } catch (e) {
     console.warn('Saved game state is invalid, clearing it', e);
