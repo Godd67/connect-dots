@@ -25,7 +25,7 @@ const canvasContainer = document.querySelector('.canvas-container');
 const settingDefaultSize = document.getElementById('setting-default-size');
 const settingAspectRatio = document.getElementById('setting-aspect-ratio');
 const settingApplause = document.getElementById('setting-applause');
-const settingNav = document.getElementById('setting-nav');
+
 const debugParams = new URLSearchParams(window.location.search);
 const AUTOSCROLL_DEBUG = debugParams.has('debug_autoscroll') || localStorage.getItem('dots-debug-autoscroll') === '1';
 
@@ -42,7 +42,11 @@ const Settings = {
     defaultGridSize: 10,
     aspectRatio: '1:1',
     applauseSound: true,
-    navMode: 'drag'
+    progressiveMode: false,
+    startGrid: 10,
+    endGrid: 15,
+    expertLevels: false,
+    loopSeries: false
   },
 
   load() {
@@ -72,17 +76,143 @@ const Settings = {
     if (settingDefaultSize) settingDefaultSize.value = this.data.defaultGridSize;
     if (settingAspectRatio) settingAspectRatio.value = this.data.aspectRatio;
     if (settingApplause) settingApplause.checked = this.data.applauseSound;
-    if (settingNav) settingNav.value = this.data.navMode;
+    
+    const progressiveCheck = document.getElementById('setting-progressive');
+    if (progressiveCheck) {
+      progressiveCheck.checked = this.data.progressiveMode;
+      toggleProgressiveSettings(this.data.progressiveMode);
+    }
+    
+    const startGridInput = document.getElementById('setting-start-grid');
+    if (startGridInput) startGridInput.value = this.data.startGrid;
+    
+    const endGridInput = document.getElementById('setting-end-grid');
+    if (endGridInput) endGridInput.value = this.data.endGrid;
+    
+    const expertLevelsCheck = document.getElementById('setting-expert-levels');
+    if (expertLevelsCheck) expertLevelsCheck.checked = this.data.expertLevels;
+    
+    const loopSeriesCheck = document.getElementById('setting-loop');
+    if (loopSeriesCheck) loopSeriesCheck.checked = this.data.loopSeries;
   },
 
   syncFromUI() {
     if (settingDefaultSize) this.data.defaultGridSize = parseInt(settingDefaultSize.value) || 10;
     if (settingAspectRatio) this.data.aspectRatio = settingAspectRatio.value || '1:1';
     if (settingApplause) this.data.applauseSound = settingApplause.checked;
-    if (settingNav) this.data.navMode = settingNav.value;
+    
+    const progressiveCheck = document.getElementById('setting-progressive');
+    if (progressiveCheck) this.data.progressiveMode = progressiveCheck.checked;
+    
+    const startGridInput = document.getElementById('setting-start-grid');
+    if (startGridInput) this.data.startGrid = parseInt(startGridInput.value) || 10;
+    
+    const endGridInput = document.getElementById('setting-end-grid');
+    if (endGridInput) this.data.endGrid = parseInt(endGridInput.value) || 15;
+    
+    const expertLevelsCheck = document.getElementById('setting-expert-levels');
+    if (expertLevelsCheck) this.data.expertLevels = expertLevelsCheck.checked;
+    
+    const loopSeriesCheck = document.getElementById('setting-loop');
+    if (loopSeriesCheck) this.data.loopSeries = loopSeriesCheck.checked;
+
     this.save();
   }
 };
+
+// Series Progress Management
+const Series = {
+  history: {}, // { "size-mode": "solved" | "skipped" | "future" }
+
+  getStepKey(size, isExpert) {
+    return `${size}-${isExpert ? 'H' : 'S'}`;
+  },
+
+  update(currentSize, isExpert) {
+    if (!Settings.data.progressiveMode) return;
+
+    const steps = this.getAllSteps();
+    const currentKey = this.getStepKey(currentSize, isExpert);
+    let reachedCurrent = false;
+
+    steps.forEach(key => {
+      if (key === currentKey) {
+        reachedCurrent = true;
+      } else if (!reachedCurrent) {
+        // Levels before current that aren't marked 'solved' are 'skipped'
+        if (!this.history[key]) {
+          this.history[key] = 'skipped';
+        }
+      }
+    });
+    this.save();
+  },
+
+  markSolved(size, isExpert) {
+    const key = this.getStepKey(size, isExpert);
+    this.history[key] = 'solved';
+    this.save();
+  },
+
+  getAllSteps() {
+    const steps = [];
+    const start = Settings.data.startGrid;
+    const end = Settings.data.endGrid;
+    for (let s = start; s <= end; s++) {
+      steps.push(this.getStepKey(s, false));
+      if (Settings.data.expertLevels) {
+        steps.push(this.getStepKey(s, true));
+      }
+    }
+    return steps;
+  },
+
+  save() {
+    localStorage.setItem('dots-series-history', JSON.stringify(this.history));
+  },
+
+  load() {
+    try {
+      const saved = localStorage.getItem('dots-series-history');
+      if (saved) this.history = JSON.parse(saved);
+    } catch (e) {
+      console.warn("Failed to load series history", e);
+    }
+  },
+
+  reset() {
+    this.history = {};
+    this.save();
+  }
+};
+
+function updateModeIndicator() {
+  const container = document.getElementById('mode-indicator');
+  if (!container) return;
+
+  if (!Settings.data.progressiveMode) {
+    container.innerHTML = `<div>Mode: Simple</div>`;
+    return;
+  }
+
+  const steps = Series.getAllSteps();
+  const currentIsExpert = hardModeBtn.classList.contains('active');
+  const currentKey = Series.getStepKey(gridSize, currentIsExpert);
+
+  let dotsHtml = '';
+  steps.forEach(key => {
+    let status = Series.history[key] || 'future';
+    if (key === currentKey) {
+      status = 'current';
+    }
+    dotsHtml += `<div class="progress-dot ${status}" title="${key.replace('-', ' ')}"></div>`;
+  });
+
+  container.innerHTML = `
+    <div>Mode: Progressive</div>
+    <div class="progress-dots">${dotsHtml}</div>
+  `;
+}
 
 let gridSize = Settings.data.defaultGridSize; // Initialized from settings
 
@@ -452,6 +582,34 @@ function updateCanvasDisplaySize() {
   canvas.style.height = `${Math.round(boardBaseHeight * boardScale)}px`;
 }
 
+function toggleProgressiveSettings(enabled) {
+  const section = document.getElementById('progressive-settings');
+  if (section) {
+    if (enabled) section.classList.remove('hidden');
+    else section.classList.add('hidden');
+  }
+}
+
+function showConfirmation({ title, text, btn1, btn2, onBtn1, onBtn2 }) {
+  const modal = document.getElementById('confirm-modal');
+  const titleEl = document.getElementById('confirm-title');
+  const textEl = document.getElementById('confirm-text');
+  const b1 = document.getElementById('confirm-btn-1');
+  const b2 = document.getElementById('confirm-btn-2');
+
+  titleEl.textContent = title;
+  textEl.textContent = text;
+  b1.textContent = btn1;
+  b2.textContent = btn2;
+
+  const close = () => modal.classList.add('hidden');
+
+  b1.onclick = () => { close(); onBtn1?.(); };
+  b2.onclick = () => { close(); onBtn2?.(); };
+
+  modal.classList.remove('hidden');
+}
+
 function init() {
   console.log(`Connect The Dots - v${APP_VERSION} Initialized`);
   if (AUTOSCROLL_DEBUG) {
@@ -472,12 +630,33 @@ function init() {
   }
 
   generateBtn.addEventListener('click', () => {
-    // If user has not changed the seed input manually, randomize it.
-    // This allows "New" to truly feel like a new level every time.
-    if (!seedDirty && seedInput.value === loadedSeed) {
-      seedInput.value = '';
+    if (Settings.data.progressiveMode && Settings.data.startGrid !== Settings.data.endGrid) {
+      showConfirmation({
+        title: "Regenerate Level",
+        text: "Regenerate the current level or the whole series?",
+        btn1: "Level",
+        btn2: "Series",
+        onBtn1: () => {
+          if (!seedDirty && seedInput.value === loadedSeed) {
+            seedInput.value = '';
+          }
+          generate();
+        },
+        onBtn2: () => {
+          gridSize = Settings.data.startGrid;
+          sizeDisplay.textContent = gridSize;
+          hardModeBtn.classList.remove('active');
+          seedInput.value = '';
+          Series.reset();
+          generate(gridSize, false);
+        }
+      });
+    } else {
+      if (!seedDirty && seedInput.value === loadedSeed) {
+        seedInput.value = '';
+      }
+      generate();
     }
-    generate();
   });
 
   const updateSeedFromUI = () => {
@@ -498,7 +677,7 @@ function init() {
     if (match) {
       const size = parseInt(match[1]);
       const hard = (match[2] === 'H');
-      if (size >= 5 && size <= 20) {
+      if (size >= 5 && size <= 25) {
         gridSize = size;
         sizeDisplay.textContent = size;
         if (hard) hardModeBtn.classList.add('active');
@@ -510,6 +689,7 @@ function init() {
   hardModeBtn.addEventListener('click', () => {
     hardModeBtn.classList.toggle('active');
     updateSeedFromUI();
+    updateModeIndicator();
   });
 
   // Hint button: press and hold to show
@@ -539,14 +719,16 @@ function init() {
       gridSize--;
       sizeDisplay.textContent = gridSize;
       updateSeedFromUI();
+      updateModeIndicator();
     }
   });
 
   sizeIncreaseBtn.addEventListener('click', () => {
-    if (gridSize < 20) {
+    if (gridSize < 25) {
       gridSize++;
       sizeDisplay.textContent = gridSize;
       updateSeedFromUI();
+      updateModeIndicator();
     }
   });
 
@@ -587,24 +769,39 @@ function init() {
   settingsCloseBtn.addEventListener('click', () => {
     Settings.syncFromUI();
     settingsModal.classList.add('hidden');
+    updateModeIndicator();
   });
 
   settingAspectRatio.addEventListener('change', () => {
     Settings.syncFromUI();
   });
+  
+  const progressiveCheck = document.getElementById('setting-progressive');
+  if (progressiveCheck) {
+    progressiveCheck.addEventListener('change', (e) => {
+      toggleProgressiveSettings(e.target.checked);
+      updateModeIndicator();
+    });
+  }
 
   // Close modal on outside click
   window.addEventListener('click', (e) => {
     if (e.target === settingsModal) {
       Settings.syncFromUI();
       settingsModal.classList.add('hidden');
+      updateModeIndicator();
+    }
+    if (e.target === document.getElementById('confirm-modal')) {
+      document.getElementById('confirm-modal').classList.add('hidden');
     }
   });
 
   // Load Settings
   Settings.load();
+  Series.load();
   gridSize = Settings.data.defaultGridSize;
   sizeDisplay.textContent = gridSize;
+  updateModeIndicator();
 
   // Mouse Events
   canvas.addEventListener('mousedown', (e) => {
@@ -869,15 +1066,11 @@ function extendActivePathAt(clientX, clientY) {
 
     // Check if path is already "finished" (reached the other dot)
     const currentPoints = userPaths[activePathId];
-    const pathEnd = targetDots.find(d => d[0] === lr && d[1] === lc);
     const totalEndsFound = targetDots.filter(d => currentPoints.some(p => p[0] === d[0] && p[1] === d[1])).length;
 
     // If we were already at an endpoint (that wasn't the start), don't extend further 
     // unless we are backtracking (handled above)
     if (totalEndsFound >= 2 && currentPoints.length > 1) {
-      const [fr, fc] = currentPoints[0];
-      const [lr_p, lc_p] = currentPoints[currentPoints.length - 1];
-      // if last point is the "other" dot, stop
       return;
     }
 
@@ -951,16 +1144,69 @@ function checkWin() {
 
     if (!conn1 && !conn2) {
       allConnected = false;
-    } else {
-      console.log(`Path ${path.id} is connected!`);
     }
   }
 
   if (allConnected) {
     console.log("ALL PATHS CONNECTED!");
+    Series.markSolved(gridSize, hardModeBtn.classList.contains('active'));
     clearSavedGameState();
     updateTitle(true);
     playApplause();
+
+    if (Settings.data.progressiveMode) {
+      const isExpert = hardModeBtn.classList.contains('active');
+      let nextSize = gridSize;
+      let nextExpert = isExpert;
+
+      if (Settings.data.expertLevels && !isExpert) {
+        // Current not expert, generate same size expert
+        nextExpert = true;
+      } else {
+        // Current is expert (or expert levels disabled), move to next size
+        if (gridSize < Settings.data.endGrid) {
+          nextSize = gridSize + 1;
+          nextExpert = Settings.data.expertLevels ? false : isExpert;
+        } else {
+          // Reached end grid
+          if (Settings.data.loopSeries) {
+            // Restart series
+            nextSize = Settings.data.startGrid;
+            nextExpert = false;
+          } else {
+            // Show start over popup
+            setTimeout(() => {
+              showConfirmation({
+                title: "Congratulations!",
+                text: "You've completed the series! Do you want to start over?",
+                btn1: "Yes",
+                btn2: "No",
+                onBtn1: () => {
+                  gridSize = Settings.data.startGrid;
+                  sizeDisplay.textContent = gridSize;
+                  hardModeBtn.classList.remove('active');
+                  seedInput.value = '';
+                  Series.reset();
+                  generate(gridSize, false);
+                }
+              });
+            }, 1000);
+            return;
+          }
+        }
+      }
+
+      // Generate next level automatically
+      setTimeout(() => {
+        gridSize = nextSize;
+        sizeDisplay.textContent = nextSize;
+        if (nextExpert) hardModeBtn.classList.add('active');
+        else hardModeBtn.classList.remove('active');
+        seedInput.value = '';
+        generate(nextSize, nextExpert);
+        updateModeIndicator();
+      }, 2000);
+    }
   } else {
     updateTitle(false);
   }
@@ -1071,22 +1317,6 @@ function updateEdgeScrollIntent(clientX, clientY) {
     } else if (edgeScroll.moveY > 0 && hidden.down > AUTOSCROLL_STOP_BUFFER && distBottom <= AUTOSCROLL_EDGE_ZONE) {
       dy = getEdgeSpeed(distBottom);
       reason = dx !== 0 ? `${reason}+down` : 'scroll-down';
-    }
-
-    if (dx === 0 && dy === 0) {
-      if (edgeScroll.moveX === 0 && edgeScroll.moveY === 0) {
-        reason = 'movement-too-small';
-      } else if (edgeScroll.moveX < 0 && hidden.left <= AUTOSCROLL_STOP_BUFFER) {
-        reason = 'left-visible';
-      } else if (edgeScroll.moveX > 0 && hidden.right <= AUTOSCROLL_STOP_BUFFER) {
-        reason = 'right-visible';
-      } else if (edgeScroll.moveY < 0 && hidden.up <= AUTOSCROLL_STOP_BUFFER) {
-        reason = 'top-visible';
-      } else if (edgeScroll.moveY > 0 && hidden.down <= AUTOSCROLL_STOP_BUFFER) {
-        reason = 'bottom-visible';
-      } else {
-        reason = 'not-near-edge';
-      }
     }
   }
 
@@ -1200,14 +1430,14 @@ function resetGameState() {
   updateTitle(false);
 }
 
-function generate() {
+function generate(forcedSize = null, forcedHard = null) {
   let seed = seedInput.value.trim();
-  let cols = gridSize;
-  let hardMode = hardModeBtn.classList.contains('active');
+  let cols = forcedSize !== null ? forcedSize : gridSize;
+  let hardMode = forcedHard !== null ? forcedHard : hardModeBtn.classList.contains('active');
 
   // Pattern: [Size][Mode][RandomPart] (e.g., 10HB7AQ66)
   const match = seed.match(/^(\d+)([HS])(.+)$/);
-  if (match) {
+  if (match && forcedSize === null) {
     cols = parseInt(match[1]);
     hardMode = (match[2] === 'H');
     seed = match[3];
@@ -1229,6 +1459,9 @@ function generate() {
   const displaySeed = `${cols}${modeChar}${seed}`;
   seedInput.value = displaySeed;
   seedDirty = false;
+
+  Series.update(cols, hardMode);
+  updateModeIndicator();
 
   // Treat the selected size as the actual play-grid column count.
   // Aspect ratio only affects the number of rows.
@@ -1379,9 +1612,6 @@ function draw() {
         ctx.lineWidth = 1;
         roundRect(ctx, stoneX, stoneY, stoneSize, stoneSize, radius);
         ctx.stroke();
-      } else {
-        // Path ID exists
-        // (No background needed, path drawn on top later)
       }
     }
   }
@@ -1549,4 +1779,3 @@ async function forceUpdate() {
 }
 
 init();
-

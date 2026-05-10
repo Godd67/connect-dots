@@ -540,6 +540,16 @@ footer p {
   font-size: 0.95rem;
 }
 
+.settings-section {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.settings-section.hidden {
+  display: none;
+}
+
 .setting-item input[type="number"],
 .setting-item select {
   background: #333;
@@ -575,6 +585,27 @@ footer p {
 
 .primary-btn:hover {
   filter: brightness(1.1);
+}
+
+.secondary-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+#confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
 }
 
 /* Debug Mode Styles */
@@ -638,4 +669,3 @@ footer p {
 #toast-msg.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
-}
