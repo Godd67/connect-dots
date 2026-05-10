@@ -564,6 +564,19 @@ footer p {
   display: none;
 }
 
+.subsettings-panel {
+  background: rgba(0, 0, 0, 0.15);
+  padding: 15px;
+  border-radius: 12px;
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.subsettings-panel .setting-item:last-child {
+  margin-bottom: 0;
+}
+
 .setting-item input[type="number"],
 .setting-item select {
   background: #333;
